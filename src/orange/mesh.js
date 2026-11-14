@@ -33,7 +33,8 @@ function warp(u, v, pole) {
   if (!pole) return [u, v];
   const r = Math.max(Math.abs(u), Math.abs(v));
   if (r < 1e-9) return [u, v];
-  const k = POLE_K + (1 - POLE_K) * r * r;
+  const t = Math.min(1, r / 0.5);
+  const k = POLE_K + (1 - POLE_K) * t * t * (3 - 2 * t);
   return [u * k, v * k];
 }
 
