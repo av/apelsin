@@ -1,7 +1,7 @@
 import { FRAME_UBO, NOISE, SURFACE, LIGHTING } from '../shaders/common.js';
-import { SHAPE_GLSL } from './shape.js';
+import { SHAPE_GLSL, GLAND_RADIAL } from './shape.js';
 import { ORANGE_UBO } from './glsl.js';
-import { STANDIN_GLSL } from './standin.js';
+import { RIND_GLSL } from './rind-glsl.js';
 import { FIELD_COMMON, FIELD_GLSL } from './field-glsl.js';
 import { MAX_PLANES } from './proxy.js';
 
@@ -89,12 +89,12 @@ bool refine(vec3 ro, vec3 rd, inout float t, out int which, int steps) {
   bool near = false;
   for (int i = 0; i < ${MAX_PLANES}; i++) {
     if (i >= uPlaneCount) break;
-    if (dot(uPlanes[i].xyz, p) - uPlanes[i].w > H_MIN - 0.00005) { near = true; c = min(c, max(abs(dot(uPlanes[i].xyz, rd)), 0.2)); }
+    if (dot(uPlanes[i].xyz, p) - uPlanes[i].w > H_MIN - 0.00005) { near = true; c = min(c, abs(dot(uPlanes[i].xyz, rd))); }
   }
   if (!near) { which = -1; return true; }
   float f0 = fine(p, which);
   if (f0 <= 0.0) return true;
-  float dt = (H_MAX - H_MIN) / c / float(steps);
+  float dt = min((H_MAX - H_MIN) / max(c, 0.01), 0.006) / float(steps);
   float t0 = t;
   for (int k = 1; k <= 12; k++) {
     if (k > steps) break;
@@ -115,7 +115,22 @@ bool refine(vec3 ro, vec3 rd, inout float t, out int which, int steps) {
     }
     t0 = t1; f0 = f1;
   }
-  return false;
+  float tp = t;
+  which = -1;
+  for (int i = 0; i < ${MAX_PLANES}; i++) {
+    if (i >= uPlaneCount) break;
+    float dn = dot(uPlanes[i].xyz, rd);
+    float s0 = dot(uPlanes[i].xyz, ro) - uPlanes[i].w;
+    if (dn < 0.0 && s0 > 0.0) { float ti = -s0 / dn; if (ti > tp) { tp = ti; which = i; } }
+  }
+  vec3 q = ro + rd * tp;
+  if (envelope(q) > 0.00002) return false;
+  for (int i = 0; i < ${MAX_PLANES}; i++) {
+    if (i >= uPlaneCount) break;
+    if (dot(uPlanes[i].xyz, q) - uPlanes[i].w > 0.00002) return false;
+  }
+  t = tp;
+  return true;
 }
 float pixelScale() { return 2.0 / (uProj[1][1] * uResolution.y); }
 vec3 reliefNormal(vec3 p, int which, float e) {
@@ -134,7 +149,7 @@ int tierSteps(int low, int med, int high, int ultra) {
 }
 `;
 
-const HEAD = (pass) => '#ifndef OUTPUT_SCALE\n#define OUTPUT_SCALE 1.0\n#endif\n' + FRAME_UBO + NOISE + SURFACE + (pass === 'main' ? LIGHTING : '') + ORANGE_UBO + SHAPE_GLSL + FIELD_COMMON + STANDIN_GLSL + FIELD_GLSL + MARCH;
+const HEAD = (pass) => '#ifndef OUTPUT_SCALE\n#define OUTPUT_SCALE 1.0\n#endif\n' + FRAME_UBO + NOISE + SURFACE + (pass === 'main' ? LIGHTING : '') + ORANGE_UBO + SHAPE_GLSL + `const float GLAND_RADIAL = ${GLAND_RADIAL.toFixed(3)};\n` + FIELD_COMMON + RIND_GLSL + FIELD_GLSL + MARCH;
 
 const SHADOW_FS = `
 out vec4 outColor;

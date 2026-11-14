@@ -241,11 +241,14 @@ Surface cutSurface(SurfaceInput si, vec4 plane, vec3 Nrest) {
   float w = clamp(A.depthP / A.pulpD, 0.0, 1.0);
   if (A.depthP < 0.0) {
     vec4 g = glandAt(A.dir);
-    vec3 tg = g.xyz - A.dir * dot(g.xyz, A.dir);
-    float tdist = length(tg), grad = max(g.w, 1e-5), has = step(1e-5, g.w);
-    float gd = grad * 1.25 + 0.00006;
-    float ge = length(vec2(tdist / grad, (A.depthO - gd) / (1.3 * grad)));
-    float tooth = has * (gd + 1.3 * grad * sqrt(max(1.0 - tdist * tdist / (2.6 * grad * grad), 0.0)) + 0.0001);
+    float has = step(1e-6, g.w), grad = max(g.w, 1e-5);
+    vec3 gdir = g.xyz / max(length(g.xyz), 1e-6);
+    vec3 off = p - g.xyz;
+    float radial = dot(off, gdir);
+    float tdist = length(off - gdir * radial);
+    float ge = length(vec2(tdist / grad, radial / (GLAND_RADIAL * grad)));
+    float gd = A.sh.x - length(g.xyz);
+    float tooth = has * (gd + GLAND_RADIAL * grad * sqrt(max(1.0 - tdist * tdist / (2.6 * grad * grad), 0.0)) + 0.0001);
     float bn = vnoise(A.dir * 9000.0 + oNoise.zxy) - 0.5;
     float boundary = max(A.flav * (0.8 + 0.12 * vnoise(A.dir * 1800.0 + oNoise.xyz)), tooth) + bn * 0.00008;
     float aa = px * 0.6;
