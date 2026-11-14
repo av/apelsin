@@ -489,11 +489,13 @@ test('presets are deterministic and stay still for 600 more frames', async () =>
 test('on a phone a one-finger swipe slices, two fingers orbit and zoom, the toolbar fits', async () => {
   const page = await openTouch('seed=5');
   await page.evaluate(() => window.apelsin.step(2));
-  const bar = await page.evaluate(() => [...document.querySelectorAll('#bar button, #bar .pick')].map((b) => { const r = b.getBoundingClientRect(); return [r.left, r.right, r.top, r.bottom, r.height]; }));
+  const bar = await page.evaluate(() => [...document.querySelectorAll('#bar button')].map((b) => { const r = b.getBoundingClientRect(); return [r.left, r.right, r.top, r.bottom, r.height]; }));
+  assert.equal(bar.length, 9, 'tools, four presets, new orange, sound and screenshot');
   for (const [l, r, t, b, h] of bar) {
     assert.ok(l >= 0 && r <= 390 && t >= 0 && b <= 780, 'toolbar buttons are on screen');
-    assert.ok(h >= 44, `touch target ${h}`);
+    assert.ok(h >= 44 && r - l >= 36, `touch target ${r - l}x${h}`);
   }
+  assert.equal(new Set(bar.map((b) => Math.round(b[2]))).size, 1, 'the toolbar is a single row');
   const cdp = await page.context.newCDPSession(page);
   const touch = (type, points) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: points.map(([x, y], id) => ({ x, y, id })) });
   const [cx, cy] = await project(page, [0, 0.04, 0]);
