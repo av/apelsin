@@ -1,5 +1,4 @@
 import { FRAME_UBO, NOISE, SURFACE, LIGHTING } from './common.js';
-import { ORANGE_MATERIAL } from '../orange/glsl.js';
 import { WINDOW } from '../scenes.js';
 
 export const ATTRIBS = { aPos: 0, aNormal: 1, aCap: 2 };
@@ -352,7 +351,6 @@ Surface materialSurface(SurfaceInput si) {
 `;
 
 export const MATERIALS = {
-  orange: ORANGE_MATERIAL,
   cove: WETNESS + COVE,
   board: WETNESS + BOARD,
   counter: WETNESS + COUNTER,
