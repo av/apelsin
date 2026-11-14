@@ -56,11 +56,21 @@ float ridgeLift(vec3 p, int i) {
     if (j >= uPlaneCount) break;
     if (j != i) m = min(m, uPlanes[j].w - dot(uPlanes[j].xyz, p));
   }
-  float k = (1.0 - smoothstep(0.0, 0.0012, max(m, 0.0))) * smoothstep(0.003, 0.006, length(p.xz));
+  if (m < 0.0) return 0.0;
+  float k = (1.0 - smoothstep(0.0, 0.0012, m)) * smoothstep(0.003, 0.006, length(p.xz));
   if (k <= 0.0) return 0.0;
   return gPx > 0.00015 ? k * 0.00012 : k * 0.00025 * vnoise(p * 1500.0 + oNoise.zxy);
 }
-float reliefH(vec3 p, int i) { return cutHeight(p, uPlanes[i]) + ridgeLift(p, i); }
+float faceInset(vec3 p, int i) {
+  float m = 1.0;
+  for (int j = 0; j < ${MAX_PLANES}; j++) {
+    if (j >= uPlaneCount) break;
+    if (j != i) m = min(m, uPlanes[j].w - dot(uPlanes[j].xyz, p));
+  }
+  return smoothstep(0.0, 0.0015, m);
+}
+float proudClamp(float h, vec3 p, int i) { return h > 0.0 ? h * faceInset(p, i) : h; }
+float reliefH(vec3 p, int i) { return proudClamp(cutHeight(p, uPlanes[i]), p, i) + ridgeLift(p, i); }
 float fine(vec3 p, out int which) {
   float d = envelope(p);
   which = -1;
@@ -87,8 +97,7 @@ int tierSteps(int low, int med, int high, int ultra) {
   float t = uFlags.x;
   return t < 0.5 ? low : t < 1.5 ? med : t < 2.5 ? high : ultra;
 }
-bool marchCoarse(vec3 ro, vec3 rd, float tMax, float eps, int steps, float lift, out float t) {
-  t = 0.0;
+bool marchCoarse(vec3 ro, vec3 rd, float tMax, float eps, int steps, float lift, inout float t) {
   float d = 1.0;
   for (int i = 0; i < 64; i++) {
     if (i >= steps) break;
@@ -122,11 +131,16 @@ bool refine(vec3 ro, vec3 rd, inout float t, out int which, int steps) {
       int iters = tierSteps(2, 2, 2, 2);
       for (int k = 0; k < 4; k++) {
         if (k >= iters) break;
-        tt = (s0 - cutHeight(ro + rd * tt, pl)) / dn;
+        tt = (s0 - reliefH(ro + rd * tt, only)) / dn;
       }
-      t = max(tt, t);
-      which = only;
-      return true;
+      tt = max(tt, t);
+      vec3 q = ro + rd * tt;
+      bool ok = envelope(q) < 0.00002;
+      for (int i = 0; i < ${MAX_PLANES}; i++) {
+        if (i >= uPlaneCount) break;
+        if (i != only && dot(uPlanes[i].xyz, q) - uPlanes[i].w > H_MIN) ok = false;
+      }
+      if (ok) { t = tt; which = only; return true; }
     }
   }
   float f0 = fine(p, which);
@@ -152,20 +166,29 @@ bool refine(vec3 ro, vec3 rd, inout float t, out int which, int steps) {
     }
     t0 = t1; f0 = f1;
   }
-  float tp = t;
+  float tp = t, te = 1e9;
   which = -1;
   for (int i = 0; i < ${MAX_PLANES}; i++) {
     if (i >= uPlaneCount) break;
     float dn = dot(uPlanes[i].xyz, rd);
     float s0 = dot(uPlanes[i].xyz, ro) - uPlanes[i].w;
-    if (dn < 0.0 && s0 > 0.0) { float ti = -s0 / dn; if (ti > tp) { tp = ti; which = i; } }
+    if (abs(dn) < 1e-7) { if (s0 > 0.0) return false; continue; }
+    float ti = -s0 / dn;
+    if (dn < 0.0) { if (ti > tp) { tp = ti; which = i; } }
+    else te = min(te, ti);
   }
-  vec3 q = ro + rd * tp;
-  if (envelope(q) > 0.00002) return false;
-  for (int i = 0; i < ${MAX_PLANES}; i++) {
-    if (i >= uPlaneCount) break;
-    if (dot(uPlanes[i].xyz, q) - uPlanes[i].w > 0.00002) return false;
+  if (tp > te) return false;
+  float tt = tp;
+  bool inside = false;
+  for (int k = 0; k < 32; k++) {
+    float e = envelope(ro + rd * tt);
+    if (e < 0.00001) { inside = true; break; }
+    tt += max(e, 0.00002);
+    if (tt > te) return false;
   }
+  if (!inside) return false;
+  if (tt > tp + 0.000001) which = -1;
+  tp = tt;
   t = tp;
   return true;
 }
@@ -189,7 +212,7 @@ void main() {
   vec3 ro, rd;
   setupRay(ro, rd);
   float tMax = tExit(ro, rd);
-  float t;
+  float t = 0.0;
   float texel = uShadowParams.x * 2.0 * uShadowParams.y;
   if (!marchCoarse(ro, rd, tMax, texel * 0.5, 24, 0.0, t)) discard;
   vec3 p = ro + rd * t;
@@ -209,9 +232,9 @@ void main() {
   float k = pixelScale();
   gPx = distance(cam, ro) * k;
   float eps = max(gPx * 0.35, 0.000004);
-  float t;
+  float t = 0.0;
+  int which = -1;
   if (!marchCoarse(ro, rd, tMax, eps, tierSteps(24, 32, 40, 48), H_MAX, t)) discard;
-  int which;
   if (!refine(ro, rd, t, which, tierSteps(4, 4, 4, 5))) discard;
   vec3 p = ro + rd * t;
   vec3 Nr = which < 0 ? envelopeNormal(p) : uPlanes[which].xyz;
@@ -250,7 +273,7 @@ void main() {
     Anat A = anatomy(q);
     Sac S = noSac();
     if (fleshy(A)) S = sacsAt(A);
-    float h = heightAt(A, S, q, uPlanes[i]) + ridgeLift(p, i);
+    float h = proudClamp(heightAt(A, S, q, uPlanes[i]), p, i) + ridgeLift(p, i);
     if (s - h > best) { best = s - h; which = i; hw = h; Aw = A; Sw = S; }
   }
   vec3 Nr = which < 0 ? envelopeNormal(p) : uPlanes[which].xyz;
