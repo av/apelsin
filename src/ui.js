@@ -3,7 +3,6 @@ import { PRESET_NAMES } from './presets.js';
 const TOOL_HINTS = {
   knife: { touch: 'Swipe across the orange to slice it', mouse: 'Drag across the orange to slice it' },
   hand: { touch: 'Drag a piece to lift it, flick to toss', mouse: 'Drag a piece to lift it, flick to toss' },
-  squeeze: { touch: 'Press and hold a cut face to squeeze', mouse: 'Press and hold a cut face to squeeze' },
 };
 
 export function createUI(app, { test = false } = {}) {
@@ -47,7 +46,7 @@ export function createUI(app, { test = false } = {}) {
   window.addEventListener('keydown', (e) => {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     const k = e.key.toLowerCase();
-    const tools = { k: 'knife', h: 'hand', s: 'squeeze' };
+    const tools = { k: 'knife', h: 'hand' };
     if (tools[k]) { app.setTool(tools[k]); toolHint(tools[k]); }
     else if (k >= '1' && k <= '5') app.runPreset(PRESET_NAMES[+k - 1]);
     else if (k === 'n') app.newOrange();

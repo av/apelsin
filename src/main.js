@@ -193,7 +193,7 @@ function boot() {
       tool: state.tool, preset: state.preset, awake: app.physics ? app.physics.awake(world.pieces) : 0, errors: gl.errors.slice(),
       width: renderer.width, height: renderer.height, floatTargets: gl.caps.floatTargets,
       knife: tools.knifeVisible, splats: juice.stats.splats, drips: juice.stats.drips, slowmo: state.slowmo, macro: state.macro,
-      squash: world.pieces.reduce((m, p) => Math.max(m, p.squash), 0), muted: audio.muted,
+      muted: audio.muted,
     }),
     poses: () => world.pieces.map((p) => ({ id: p.id, position: p.position.slice(), rotation: p.rotation.slice(), sleeping: p.body ? p.body.isSleeping() : null, caps: p.caps.length, faceUp: p.caps.length ? Math.max(...p.caps.map((c) => restDirToWorld(p, c.normal)[1])) : -1 })),
     project: (p) => camera.project(p, canvas.clientWidth, canvas.clientHeight),

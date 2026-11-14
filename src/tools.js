@@ -2,7 +2,7 @@ import { v3 } from './math.js';
 import { raycastPiece } from './orange/piece.js';
 import { createKnife } from './knife.js';
 
-export const TOOL_NAMES = ['knife', 'hand', 'squeeze'];
+export const TOOL_NAMES = ['knife', 'hand'];
 
 export function createTools(canvas, overlay, app, gl) {
   const ctx2d = overlay.getContext('2d');
@@ -11,7 +11,7 @@ export function createTools(canvas, overlay, app, gl) {
   let mode = null;
   let stroke = [];
   const trails = [];
-  let grab = null, squeeze = null, pinch = null, blade = null;
+  let grab = null, pinch = null, blade = null;
   let tool = 'knife';
 
   const css = (e) => { const r = canvas.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
@@ -135,16 +135,6 @@ export function createTools(canvas, overlay, app, gl) {
       mode = 'grab';
       return;
     }
-    if (tool === 'squeeze' && hit) {
-      const cap = hit.piece.caps.length ? hit.piece.caps.reduce((best, c) => {
-        const d = Math.abs(v3.dot(v3.sub(hit.rest, c.centroid), c.normal));
-        return !best || d < best.d ? { c, d } : best;
-      }, null).c : null;
-      squeeze = { piece: hit.piece, cap, time: 0, state: {} };
-      app.audio.squeezeStart?.();
-      mode = 'squeeze';
-      return;
-    }
     mode = 'orbit';
   }
 
@@ -177,8 +167,6 @@ export function createTools(canvas, overlay, app, gl) {
   function cancelTool() {
     if (mode === 'knife') { trails.push({ pts: stroke, age: 0 }); stroke = []; knife.release(false); }
     if (grab) { app.physics?.release(null); grab = null; }
-    if (squeeze) app.audio.squeezeStop?.();
-    squeeze = null;
     blade = null;
   }
 
@@ -199,7 +187,6 @@ export function createTools(canvas, overlay, app, gl) {
       app.physics.release(vel);
       grab = null;
     }
-    if (mode === 'squeeze') { squeeze = null; app.audio.squeezeStop?.(); }
     if (pointers.size === 0) mode = null;
     else if (mode === 'pinch' && pointers.size < 2) { mode = 'pinch-end'; pinch = null; }
   }
@@ -214,19 +201,6 @@ export function createTools(canvas, overlay, app, gl) {
 
   function update(dt) {
     knife.update(dt);
-    if (squeeze) {
-      const s = squeeze;
-      if (!app.world.pieces.includes(s.piece)) { squeeze = null; app.audio.squeezeStop?.(); }
-      else {
-        s.time += dt;
-        if (s.cap) app.juice.squeeze(s.piece, s.cap, app.world.params, dt, s.time, s.state);
-        app.audio.squeezeLevel?.(Math.min(1, 0.25 + s.time * 0.6), !!s.cap);
-        const target = s.cap ? 0.07 + 0.03 * Math.min(1, s.time) : 0.03;
-        s.piece.squash += (target - s.piece.squash) * Math.min(1, dt * 7);
-        app.physics?.wake(s.piece);
-      }
-    }
-    for (const p of app.world.pieces) if ((!squeeze || squeeze.piece !== p) && p.squash > 0) p.squash = Math.max(0, p.squash - dt * 0.35 - p.squash * dt * 6);
   }
 
   function drawOverlay(dt) {

@@ -132,21 +132,14 @@ test('a knife stroke across the orange slices it, a stroke beside it does not', 
   await page.close();
 });
 
-test('the hand tool tosses a piece and squeeze spurts juice from a cut face', async () => {
+test('the hand tool lifts and tosses a piece', async () => {
   const page = await open('seed=9&preset=halves');
   await page.evaluate(() => window.apelsin.step(10));
-  assert.equal(await page.evaluate(() => window.apelsin.setTool('squeeze')), true);
-  const before = await page.evaluate(() => window.apelsin.info());
+  assert.equal(await page.evaluate(() => window.apelsin.setTool('squeeze')), false);
   const target = await page.evaluate(() => {
     const c = document.getElementById('gl');
     return [c.clientWidth * 0.34, c.clientHeight * 0.45];
   });
-  await page.mouse.move(...target);
-  await page.mouse.down();
-  await page.evaluate(() => window.apelsin.step(20));
-  const squeezing = await page.evaluate(() => window.apelsin.info());
-  await page.mouse.up();
-  assert.ok(squeezing.droplets > before.droplets, `squeeze droplets ${squeezing.droplets}`);
   await page.evaluate(() => window.apelsin.setTool('hand'));
   await page.mouse.move(...target);
   await page.mouse.down();
@@ -220,8 +213,10 @@ test('the toolbar and keyboard shortcuts drive presets and tools', async () => {
   assert.equal((await page.evaluate(() => window.apelsin.info())).pieces, 1);
   await page.keyboard.press('h');
   assert.equal((await page.evaluate(() => window.apelsin.info())).tool, 'hand');
-  await page.click('[data-tool="squeeze"]');
-  assert.equal((await page.evaluate(() => window.apelsin.info())).tool, 'squeeze');
+  await page.click('[data-tool="knife"]');
+  assert.equal((await page.evaluate(() => window.apelsin.info())).tool, 'knife');
+  await page.keyboard.press('s');
+  assert.equal((await page.evaluate(() => window.apelsin.info())).tool, 'knife');
   await page.keyboard.press('n');
   assert.notEqual((await page.evaluate(() => window.apelsin.info())).seed, 6);
   assert.deepEqual(page.errors, []);
@@ -433,6 +428,7 @@ test('a knife follows the pointer stroke and the cut lands on release with sound
   const later = await page.evaluate(() => window.apelsin.step(60));
   assert.equal(later.knife, false, 'the blade leaves after the cut');
   assert.ok(later.splats > 0, 'juice lands on the floor');
+  assert.ok(await page.evaluate(() => window.apelsin.wetness()) > 0, 'the floor gets a wet stain');
   await page.evaluate(() => window.apelsin.camera({ pitch: 1.3, yaw: 1.1 }));
   await page.evaluate(() => window.apelsin.step(240));
   const pieces = await page.evaluate(() => window.apelsin.poses());
@@ -461,31 +457,6 @@ test('cut pieces settle without sinking into the floor or into each other', asyn
   const b = await page.evaluate(() => window.apelsin.poses());
   const drift = Math.max(...a.map((p, i) => Math.hypot(...p.position.map((v, k) => v - b[i].position[k]))));
   assert.ok(drift < 0.002, `settled pieces stay put (${drift})`);
-  await page.close();
-});
-
-test('squeezing a cut face squashes the piece, jets juice and wets the floor', async () => {
-  const page = await open('seed=9&preset=halves');
-  await page.evaluate(() => window.apelsin.setTool('squeeze'));
-  const pieces = await page.evaluate(() => window.apelsin.poses());
-  const up = pieces.reduce((a, b) => (b.faceUp > a.faceUp ? b : a));
-  const [x, y] = await project(page, up.position);
-  const before = await page.evaluate(() => window.apelsin.info());
-  await page.mouse.move(x, y - 8);
-  await page.mouse.down();
-  await page.evaluate(() => window.apelsin.step(20));
-  const early = await page.evaluate(() => window.apelsin.info());
-  await page.evaluate(() => window.apelsin.step(60));
-  const held = await page.evaluate(() => window.apelsin.info());
-  await page.mouse.up();
-  assert.ok(early.squash > 0.03, `piece squashes ${early.squash}`);
-  assert.ok(held.droplets > early.droplets * 0.8 && held.droplets > 40, `juice jets ${early.droplets} -> ${held.droplets}`);
-  const after = await page.evaluate(() => window.apelsin.step(180));
-  assert.ok(after.splats > before.splats + 30, `floor gets wet ${before.splats} -> ${after.splats}`);
-  assert.ok(after.squash < 0.01, 'the piece springs back');
-  const wet = await page.evaluate(() => window.apelsin.wetness());
-  assert.ok(wet > 0.0001, `wet area ${wet}`);
-  assert.deepEqual(page.errors, []);
   await page.close();
 });
 

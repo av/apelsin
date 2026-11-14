@@ -289,7 +289,7 @@ export function createJuice(gl, rng = Math.random) {
 
   function fresh(piece, cap, seconds = 6) {
     for (const e of emitters) if (e.piece === piece && e.cap === cap) { e.until = Math.max(e.until, time + seconds); return; }
-    emitters.push({ piece, cap, start: time, until: time + seconds, next: time + 0.35 + rng() * 0.5, boost: 0 });
+    emitters.push({ piece, cap, start: time, until: time + seconds, next: time + 0.35 + rng() * 0.5 });
   }
 
   function lowestEdge(piece, cap) {
@@ -323,44 +323,6 @@ export function createJuice(gl, rng = Math.random) {
     growTo[i] = (0.0015 + rng() * 0.0006) * Math.min(1.25, big);
     growRate[i] = growTo[i] / (0.5 + rng() * 0.9) * big;
     stats.drips++;
-  }
-
-  function squeeze(piece, cap, params, dt, hold, state) {
-    if (!state.jets) {
-      state.jets = [];
-      for (let k = 0; k < 4; k++) { const p = fleshPoint(cap, params); if (p) state.jets.push({ p, tilt: [(rng() - 0.5) * 0.5, rng() * 0.4, (rng() - 0.5) * 0.5] }); }
-      state.acc = 0;
-    }
-    const h = Math.min(hold, 1.6);
-    const rate = 30 + 170 * h;
-    state.acc += rate * dt;
-    const nWorld = restDirToWorld(piece, cap.normal);
-    while (state.acc >= 1) {
-      state.acc -= 1;
-      const jet = state.jets.length && rng() < 0.75 ? state.jets[Math.floor(rng() * state.jets.length)] : null;
-      const p = jet ? jet.p : fleshPoint(cap, params);
-      if (!p) continue;
-      const w = restToWorld(piece, v3.add(p, v3.scale(cap.normal, 0.0007)));
-      const tilt = jet ? jet.tilt : [(rng() - 0.5) * 1.4, rng() * 0.4, (rng() - 0.5) * 1.4];
-      const dir = v3.norm(v3.add(nWorld, v3.add(tilt, [(rng() - 0.5) * 0.25, (rng() - 0.5) * 0.25, (rng() - 0.5) * 0.25])));
-      const speed = (0.18 + 0.42 * h) * (jet ? 0.75 + rng() * 0.5 : 0.25 + rng() * 0.35);
-      spawn(w, v3.scale(dir, speed), 0.00035 + rng() * (0.0004 + 0.0004 * h));
-    }
-    state.runoff = (state.runoff || 0) + dt * (6 + 30 * h);
-    while (state.runoff >= 1) {
-      state.runoff -= 1;
-      const p = rimPoint(cap, params);
-      if (!p) break;
-      const out = v3.norm(v3.sub(p, v3.scale(cap.normal, cap.d)));
-      const w = restToWorld(piece, v3.sub(p, v3.scale(cap.normal, 0.0025)));
-      spawn(w, v3.scale(restDirToWorld(piece, out), 0.01 + rng() * 0.02), 0.0008 + rng() * 0.0007);
-    }
-    if (rng() < dt * (4 + 10 * h)) {
-      const p = rimPoint(cap, params);
-      if (p) spawn(restToWorld(piece, p), v3.scale(v3.norm(v3.add(nWorld, [(rng() - 0.5), rng(), (rng() - 0.5)])), 0.3 + rng() * 0.5), 0.00004 + rng() * 0.00005, 1, 0.6);
-    }
-    fresh(piece, cap, 5);
-    for (const e of emitters) if (e.piece === piece && e.cap === cap) { e.boost = Math.min(1, e.boost + dt * 2); if (e.next > time + 0.35) e.next = time + 0.1; }
   }
 
   function addSplat(x, z, radius, amount, stretch, water) {
@@ -429,9 +391,8 @@ export function createJuice(gl, rng = Math.random) {
       if (!pieces.includes(e.piece) || time > e.until) { emitters.splice(k, 1); continue; }
       if (time < e.next) continue;
       const age = (time - e.start) / Math.max(0.1, e.until - e.start);
-      startDrip(e.piece, e.cap, params, floorAt, 1 + e.boost * 0.25);
-      e.next = time + (0.45 + 1.6 * age) * (0.6 + 0.8 * rng()) * (1 - 0.6 * e.boost);
-      e.boost = Math.max(0, e.boost - 0.2);
+      startDrip(e.piece, e.cap, params, floorAt);
+      e.next = time + (0.45 + 1.6 * age) * (0.6 + 0.8 * rng());
     }
   }
 
@@ -546,7 +507,7 @@ export function createJuice(gl, rng = Math.random) {
     get count() { return count; },
     get emitting() { return emitters.length; },
     stats, wetness: wet.colors[0], extent: WET_EXTENT, size: WET_SIZE,
-    spawn, emitFromCap, cutBurst, fresh, squeeze, update, draw, addSplat,
+    spawn, emitFromCap, cutBurst, fresh, update, draw, addSplat,
     tint: JUICE.tint,
     on(name, f) { listeners[name].push(f); },
     prepare(dt) {

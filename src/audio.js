@@ -28,7 +28,7 @@ export function createAudio() {
   let ctx = null, master = null, dry = null, verb = null, noise = null;
   let muted = false, rate = 1;
   let lastThud = -1, lastDrip = -1, rnd = Math.random;
-  let roll = null, squeezeNode = null;
+  let roll = null;
 
   function ensure() {
     if (ctx) return ctx;
@@ -223,33 +223,6 @@ export function createAudio() {
       }, 0.4);
       play(buf, Math.min(1, 0.25 + size * size * 0.9 * Math.min(1, speed)) * soft);
     },
-    squeezeStart() {
-      if (!ready()) return;
-      if (squeezeNode) squeezeNode.stop();
-      const src = ctx.createBufferSource();
-      src.buffer = noise; src.loop = true;
-      const a = ctx.createBiquadFilter(); a.type = 'bandpass'; a.frequency.value = 600; a.Q.value = 5;
-      const b = ctx.createBiquadFilter(); b.type = 'bandpass'; b.frequency.value = 1500; b.Q.value = 4;
-      const g = ctx.createGain(); g.gain.value = 0;
-      src.connect(a).connect(g); src.connect(b).connect(g); g.connect(dry);
-      src.start();
-      let nextBubble = 0;
-      squeezeNode = {
-        level(l, juicy) {
-          const t = ctx.currentTime;
-          g.gain.setTargetAtTime((juicy ? 0.5 : 0.18) * l * (0.6 + 0.8 * Math.random()), t, 0.025);
-          a.frequency.setTargetAtTime(350 + Math.random() * 700, t, 0.03);
-          b.frequency.setTargetAtTime(1000 + Math.random() * 1600, t, 0.03);
-          if (juicy && t > nextBubble) {
-            nextBubble = t + 0.03 + Math.random() * 0.12 / (0.3 + l);
-            play(synth(0.06, (out, sr) => mode(out, sr, 0.001, 700 + Math.random() * 1800, 0.004 + Math.random() * 0.006, 1, 0.5)), 0.12 + 0.2 * l);
-          }
-        },
-        stop() { g.gain.setTargetAtTime(0, ctx.currentTime, 0.04); src.stop(ctx.currentTime + 0.3); },
-      };
-    },
-    squeezeLevel(l, juicy) { if (squeezeNode && ready()) squeezeNode.level(l, juicy); },
-    squeezeStop() { if (squeezeNode) { squeezeNode.stop(); squeezeNode = null; } },
     pick() {
       if (!ready()) return;
       play(synth(0.06, (out, sr) => { burst(out, sr, 0, 0.05, 0.4, 'bandpass', 900, 0.8, 0.004); mode(out, sr, 0, 180, 0.015, 0.4); }), 0.15);
