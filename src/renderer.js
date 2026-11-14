@@ -9,10 +9,12 @@ import { createPost } from './post.js';
 import { keyLight, gradeOf } from './scenes.js';
 import { STRIDE } from './orange/mesh.js';
 import { mat4 } from './math.js';
+import { PIECE_VS, pieceFragment } from './orange/march-glsl.js';
+import { bindPiece } from './orange/piece.js';
 
 export const TIERS = {
   low: { name: 'low', index: 0, scale: 0.6, shadow: 1024, ground: 192, ssao: false, aoSamples: 0, aoRadius: 0.04, sss: false, sssTaps: 0, keySamples: 3, taa: false, bloom: false, grainScale: 0.5, dofTaps: 24, dofRadius: 10 },
-  medium: { name: 'medium', index: 1, scale: 0.75, shadow: 2048, ground: 256, ssao: true, aoSamples: 8, aoRadius: 0.03, sss: true, sssTaps: 7, keySamples: 3, taa: true, bloom: true, sharpen: 0.25, dofTaps: 14, dofRadius: 14 },
+  medium: { name: 'medium', index: 1, scale: 0.67, shadow: 2048, ground: 256, ssao: true, aoSamples: 8, aoRadius: 0.03, sss: true, sssTaps: 7, keySamples: 3, taa: true, bloom: true, sharpen: 0.25, dofTaps: 14, dofRadius: 14 },
   high: { name: 'high', index: 2, scale: 1, shadow: 2048, ground: 512, ssao: true, aoSamples: 12, aoRadius: 0.03, sss: true, sssTaps: 11, keySamples: 5, taa: true, bloom: true, sharpen: 0.2, dofTaps: 32, dofRadius: 18 },
   ultra: { name: 'ultra', index: 3, scale: 1, shadow: 4096, ground: 768, ssao: true, aoSamples: 16, aoRadius: 0.03, sss: true, sssTaps: 16, keySamples: 7, taa: true, bloom: true, sharpen: 0.2, dofTaps: 48, dofRadius: 22 },
 };
@@ -42,6 +44,12 @@ export function createRenderer(gl, canvas, { tier = 'high' } = {}) {
   const shadows = createShadows(gl, TIERS[tier].shadow, TIERS[tier].ground);
   const post = createPost(gl);
   const prepassProg = program(gl, UBER_VS, uberFragment(null, 'prepass'), { label: 'prepass' });
+  const pieceProgs = {
+    prepass: program(gl, PIECE_VS, pieceFragment('prepass'), { label: 'piece-prepass' }),
+    main: program(gl, PIECE_VS, pieceFragment('main'), { label: 'piece-main', defines: gl.caps.floatTargets ? {} : { OUTPUT_SCALE: 0.25 } }),
+    shadow: program(gl, PIECE_VS, pieceFragment('shadow'), { label: 'piece-shadow', defines: { SHADOW: 1 } }),
+  };
+  shadows.setPieces({ prog: pieceProgs.shadow, draw: (prog, d, dir) => bindPiece(gl, prog, d, [-dir[0], -dir[1], -dir[2], 0], r.orangeTextures) });
   const materialProgs = {};
   const materialProgram = (name) => materialProgs[name] || (materialProgs[name] = program(gl, UBER_VS, uberFragment(name, 'main'), { label: `material-${name}`, defines: { [`MATERIAL_${name.toUpperCase()}`]: 1, ...(GROUND_RECEIVERS.includes(name) ? { GROUND_RECEIVER: 1 } : {}), ...(gl.caps.floatTargets ? {} : { OUTPUT_SCALE: 0.25 }) } }));
   for (const name of Object.keys(MATERIALS)) materialProgram(name);
@@ -50,7 +58,7 @@ export function createRenderer(gl, canvas, { tier = 'high' } = {}) {
 
   const r = {
     gl, ibl, shadows, post, tier: TIERS[tier], width: 0, height: 0, targets: {}, fbos: {}, scene: null, backdrop: [],
-    exposure: 1, tonemapMode: 'photo', resetHistory: true, stats: { frameMs: 0 }, fleshTint: [1, 0.55, 0.02], rindTint: [1, 0.3, 0.004],
+    exposure: 1, tonemapMode: 'photo', orangeTextures: {}, resetHistory: true, stats: { frameMs: 0 }, fleshTint: [1, 0.55, 0.02], rindTint: [1, 0.3, 0.004],
   };
 
   function resize() {
@@ -75,6 +83,7 @@ export function createRenderer(gl, canvas, { tier = 'high' } = {}) {
     r.fbos = {
       prepass: fbo(gl, [t.normal, t.velocity], t.depth),
       main: fbo(gl, [t.diffuse, t.specular, t.albedo], t.depth),
+      pieces: fbo(gl, [t.diffuse, t.specular, t.albedo]),
       hdr: fbo(gl, [t.hdr], t.depth),
       combine: fbo(gl, [t.hdr]),
       hdrCopy: fbo(gl, [t.hdrCopy]),
@@ -105,7 +114,16 @@ export function createRenderer(gl, canvas, { tier = 'high' } = {}) {
     r.resetHistory = true;
   }
 
-  function setOrange(packed) {
+  function drawPieces(prog, ctx) {
+    const eye = [...ctx.camera.eye, 1];
+    gl.enable(gl.CULL_FACE);
+    for (const d of ctx.drawables) if (d.march) bindPiece(gl, prog, d, eye, r.orangeTextures);
+    gl.disable(gl.CULL_FACE);
+    gl.cullFace(gl.BACK);
+  }
+
+  function setOrange(packed, textures) {
+    if (textures) { r.orangeTextures = textures; shadows.invalidate(); }
     orangeUbo.data.set(packed);
     orangeUbo.upload();
     const tint = (offset) => { const f = Array.from(packed.slice(offset, offset + 3)); const m = Math.max(...f, 1e-3); return f.map((x) => x / m); };
@@ -148,6 +166,7 @@ export function createRenderer(gl, canvas, { tier = 'high' } = {}) {
     set(prog, 'uGroundKey', shadows.groundKey || white);
     set(prog, 'uAO', ctx.ao || white);
     set(prog, 'uWetness', ctx.frame.wetness || black);
+    for (const k in r.orangeTextures) set(prog, k, r.orangeTextures[k]);
   }
 
   function draw(prog, d) {
@@ -172,7 +191,9 @@ export function createRenderer(gl, canvas, { tier = 'high' } = {}) {
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
         gl.clearBufferfv(gl.COLOR, 1, [0, 0, 0, 0]);
         use(prepassProg);
-        for (const d of ctx.drawables) draw(prepassProg, d);
+        for (const d of ctx.drawables) if (!d.march) draw(prepassProg, d);
+        use(pieceProgs.prepass);
+        drawPieces(pieceProgs.prepass, ctx);
       },
     },
     { name: 'ssao', enabled: (ctx) => ctx.tier.ssao, run: (ctx) => post.ssao(ctx) },
@@ -182,10 +203,23 @@ export function createRenderer(gl, canvas, { tier = 'high' } = {}) {
         bind(gl, r.fbos.main);
         gl.clearColor(0, 0, 0, 0);
         gl.clear(gl.COLOR_BUFFER_BIT);
+        if (ctx.drawables.some((d) => d.march)) {
+          bind(gl, r.fbos.pieces);
+          gl.disable(gl.DEPTH_TEST);
+          const prog = pieceProgs.main;
+          use(prog);
+          bindCommon(prog, ctx);
+          set(prog, 'uSceneDepth', r.targets.depth);
+          set(prog, 'uSceneNormal', r.targets.normal);
+          drawPieces(prog, ctx);
+          bind(gl, r.fbos.main);
+          gl.enable(gl.DEPTH_TEST);
+        }
         gl.depthFunc(gl.LEQUAL);
         gl.depthMask(false);
         let current = null;
         for (const d of ctx.drawables) {
+          if (d.march) continue;
           const prog = materialProgram(d.material);
           if (prog !== current) { use(prog); bindCommon(prog, ctx); current = prog; }
           draw(prog, d);
@@ -249,6 +283,8 @@ export function createRenderer(gl, canvas, { tier = 'high' } = {}) {
     }
     fillFrame({ ...frame, shadowCasters: casters.length }, camera);
     const drawables = [...frame.drawables, ...r.backdrop];
+    let pieceId = 1;
+    for (const d of drawables) if (d.march) d.pieceId = Math.min(pieceId++, 254);
     const grade = gradeOf(r.scene);
     const ctx = {
       gl, renderer: r, frame, camera, drawables, tier: r.tier, targets: r.targets, fbos: r.fbos, ibl, post,

@@ -1,4 +1,5 @@
-import { orangeMesh, hullPoints, shapeRadius } from './orange/mesh.js';
+import { orangeMesh, hullPoints, shapeRadius, shapeOf } from './orange/mesh.js';
+import { supportPlanes } from './orange/proxy.js';
 import { slicePiece } from './orange/slice.js';
 import { createPiece, updateModel, disposePiece, worldToRest, worldDirToRest, restToWorld, drawable } from './orange/piece.js';
 import { quat, v3, mulberry32 } from './math.js';
@@ -34,6 +35,7 @@ export function createWorld(gl, { juice, audio }) {
 
   function clear() {
     for (const p of w.pieces.slice()) remove(p);
+    if (w.physics) w.physics.reset();
     juice.clear();
   }
 
@@ -49,16 +51,21 @@ export function createWorld(gl, { juice, audio }) {
 
   function newOrange(params, { tilt = true } = {}) {
     clear();
+    const key = `${params.variety}:${params.seed}`;
+    if (!w.baseMesh || w.baseMesh.key !== key) {
+      const mesh = orangeMesh(params);
+      mesh.support = supportPlanes(mesh);
+      w.baseMesh = { key, params, mesh };
+    }
+    params = w.baseMesh.params;
     w.params = params;
+    w.shape = shapeOf(params);
     w.cuts = 0;
-    if (!w.baseMesh || w.baseMesh.params !== params) w.baseMesh = { params, mesh: orangeMesh(params) };
     const piece = createPiece(gl, w.baseMesh.mesh);
     let rot = quat.identity();
     if (tilt) {
       const rng = mulberry32(params.seed ^ 0x5bd1e995);
-      const axis = v3.norm([rng() - 0.5, 0, rng() - 0.5]);
-      const lean = params.c > params.a * 1.005 ? Math.PI / 2 - 0.12 + rng() * 0.1 : 0.06 + rng() * 0.12;
-      rot = quat.mul(quat.axisAngle([0, 1, 0], rng() * Math.PI * 2), quat.axisAngle(axis, lean));
+      rot = quat.mul(quat.axisAngle([0, 1, 0], rng() * Math.PI * 2), quat.fromTo(shapeOf(params).base, [0, -1, 0]));
     }
     place(piece, [0, w.floorAt(0, 0), 0], rot);
     add(piece);

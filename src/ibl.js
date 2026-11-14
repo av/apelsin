@@ -14,11 +14,18 @@ uniform float uLightStripAt[${MAX_LIGHTS}];
 uniform int uLightCount;
 uniform int uMode;
 uniform float uCubeScale;
+uniform sampler2D uHdri;
+uniform vec4 uHdriParams;
 vec3 envRadiance(vec3 d) {
   vec3 c = vec3(0);
   if (uMode != 1) {
     float y = d.y;
     c = y > 0.0 ? mix(uHorizon, uTop, pow(clamp(y, 0.0, 1.0), 0.6)) : mix(uHorizon, uBottom, pow(clamp(-y, 0.0, 1.0), 0.4));
+    if (uHdriParams.z > 0.5) {
+      vec2 uv = vec2(atan(d.x, -d.z) / 6.2831853 + 0.5 + uHdriParams.y, acos(clamp(d.y, -1.0, 1.0)) / 3.14159265);
+      vec3 h = textureLod(uHdri, uv, 0.0).rgb * uHdriParams.x;
+      c = h * min(1.0, uHdriParams.w / max(max(h.r, h.g), 1e-4));
+    }
   }
   for (int i = 0; i < ${MAX_LIGHTS}; i++) {
     if (i >= uLightCount) break;
@@ -211,6 +218,32 @@ export function profileMean(soft, [core, coreW, strip, stripW], stripAt = 0.62) 
   return sum / (n * n);
 }
 
+export function parseHDR(buf) {
+  const u8 = new Uint8Array(buf);
+  let p = 0;
+  const line = () => { let t = ''; while (p < u8.length && u8[p] !== 10) t += String.fromCharCode(u8[p++]); p++; return t; };
+  if (!line().startsWith('#?')) throw new Error('not a radiance hdr');
+  while (line() !== '');
+  const [, h, w] = line().match(/-Y (\d+) \+X (\d+)/).map(Number);
+  const out = new Float32Array(w * h * 4), scan = new Uint8Array(w * 4);
+  for (let y = 0; y < h; y++) {
+    if (u8[p] === 2 && u8[p + 1] === 2) {
+      p += 4;
+      for (let c = 0; c < 4; c++) {
+        for (let x = 0; x < w;) {
+          let n = u8[p++];
+          if (n > 128) { n -= 128; const v = u8[p++]; while (n--) scan[(x++) * 4 + c] = v; } else while (n--) scan[(x++) * 4 + c] = u8[p++];
+        }
+      }
+    } else { scan.set(u8.subarray(p, p + w * 4)); p += w * 4; }
+    for (let x = 0; x < w; x++) {
+      const e = scan[x * 4 + 3], f = e ? 2 ** (e - 136) : 0, o = (y * w + x) * 4;
+      out[o] = scan[x * 4] * f; out[o + 1] = scan[x * 4 + 1] * f; out[o + 2] = scan[x * 4 + 2] * f; out[o + 3] = 1;
+    }
+  }
+  return { width: w, height: h, data: out };
+}
+
 export function createIBL(gl) {
   const fmt = formats(gl);
   const readFloat = gl.caps.floatTargets;
@@ -240,6 +273,26 @@ export function createIBL(gl) {
     return { source: cubeTexture(gl, SOURCE, cubeFmt, true), spec };
   };
   const env = make(), key = make();
+  const hdris = {};
+  const none = { tex: gl.createTexture() };
+  gl.bindTexture(gl.TEXTURE_2D, none.tex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 255]));
+  function hdri(url, onload) {
+    if (hdris[url]) return hdris[url];
+    const h = hdris[url] = { tex: null, ready: null };
+    h.ready = fetch(url).then((r) => r.arrayBuffer()).then((buf) => {
+      const img = parseHDR(buf);
+      h.tex = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, h.tex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, img.width, img.height, 0, gl.RGBA, gl.FLOAT, img.data);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      onload();
+    }).catch((e) => console.warn(`hdri ${url}: ${e.message}`));
+    return h;
+  }
 
   function envUniforms(desc, mode) {
     const lights = desc.lights.slice(0, MAX_LIGHTS);
@@ -253,7 +306,9 @@ export function createIBL(gl) {
       up.set([...l.up, Math.tan(l.size[1])], i * 4);
       col.set([l.color[0] * l.intensity * norm, l.color[1] * l.intensity * norm, l.color[2] * l.intensity * norm, l.soft ?? 0.15], i * 4);
     });
-    return { uTop: desc.top, uHorizon: desc.horizon, uBottom: desc.bottom, uLightDir: dir, uLightUp: up, uLightColor: col, uLightShape: shape, uLightStripAt: stripAt, uLightCount: lights.length, uMode: mode, uCubeScale: cubeScale };
+    const hd = desc.hdri && hdri(desc.hdri.url, () => { if (current === desc) ibl.bake(desc); });
+    const on = hd && hd.tex ? 1 : 0;
+    return { uTop: desc.top, uHorizon: desc.horizon, uBottom: desc.bottom, uLightDir: dir, uLightUp: up, uLightColor: col, uLightShape: shape, uLightStripAt: stripAt, uLightCount: lights.length, uMode: mode, uCubeScale: cubeScale, uHdri: on ? hd : none, uHdriParams: [desc.hdri?.scale ?? 1, desc.hdri?.yaw ?? 0, on, desc.hdri?.clamp ?? 1e4] };
   }
 
   function setInt(prog, name, v) { gl.uniform1i(prog.uniforms[name], v); }
@@ -282,12 +337,16 @@ export function createIBL(gl) {
     return sh;
   }
 
-  return {
+  let current = null;
+  const ibl = {
     lut, env: env.spec, key: key.spec, envSource: env.source, maxMip: SPEC_LEVELS - 1, cubeScale,
     shEnv: new Float32Array(36), shKey: new Float32Array(36),
     bake(desc) {
+      current = desc;
       this.shEnv = bake(env, desc, 0);
       this.shKey = bake(key, desc, 1);
     },
+    ready: () => (current?.hdri ? hdri(current.hdri.url, () => {}).ready : Promise.resolve()),
   };
+  return ibl;
 }

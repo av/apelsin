@@ -176,6 +176,7 @@ export function createShadows(gl, initialSize, initialGround = 384) {
     mat4.mul(state.viewProj, proj, view);
     state.extent = extent;
     state.range = far - near;
+    state.keyDir = keyDir.slice();
     return state;
   }
 
@@ -193,9 +194,10 @@ export function createShadows(gl, initialSize, initialGround = 384) {
     state.leak = leak;
   }
 
+  let pieces = null;
   function drawCasters(p, drawables) {
     for (const d of drawables) {
-      if (!d.castShadow) continue;
+      if (!d.castShadow || (d.march && p === prog)) continue;
       gl.uniformMatrix4fv(p.uniforms.uModel, false, d.model);
       if (p.uniforms.uPrevModel) gl.uniformMatrix4fv(p.uniforms.uPrevModel, false, d.prevModel || d.model);
       gl.bindVertexArray(d.mesh.vao);
@@ -222,6 +224,13 @@ export function createShadows(gl, initialSize, initialGround = 384) {
     gl.disable(gl.CULL_FACE);
     use(prog);
     drawCasters(prog, drawables);
+    if (pieces && drawables.some((d) => d.march && d.castShadow)) {
+      use(pieces.prog);
+      gl.enable(gl.CULL_FACE);
+      for (const d of drawables) if (d.march && d.castShadow) pieces.draw(pieces.prog, d, state.keyDir);
+      gl.disable(gl.CULL_FACE);
+      gl.cullFace(gl.BACK);
+    }
     state.groundReady = false;
     if (!floats) { gl.bindVertexArray(null); return; }
     gl.disable(gl.DEPTH_TEST);
@@ -269,6 +278,7 @@ export function createShadows(gl, initialSize, initialGround = 384) {
     get size() { return map.size; },
     resize(size, gs = groundSize) { if (size !== map.size || gs !== groundSize) { allocate(size, gs); state.size = size; } lastSignature = ''; },
     invalidate() { lastSignature = ''; },
+    setPieces(p) { pieces = p; },
     fit, fitGround, render,
   };
 }
