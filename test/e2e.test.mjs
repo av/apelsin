@@ -409,12 +409,12 @@ test('the stem end carries an olive calyx button with a stem stub', async () => 
   });
   const px = await pixels(page, 20);
   const geometry = await page.evaluate(async () => {
-    const { shapeRadius } = await import('./src/orange/mesh.js');
+    const { shapeOf } = await import('./src/orange/mesh.js');
     const { world } = window.apelsin.internals;
     const d = world.pieces[0].geometry.data;
     let top = 0;
     for (let i = 1; i < d.length; i += 7) top = Math.max(top, d[i]);
-    return { top, c: shapeRadius(world.params, [0, 1, 0]) };
+    return { top, c: shapeOf(world.params).radius([0, 1, 0]) };
   });
   const calyx = await page.evaluate(async () => {
     const url = window.apelsin.screenshot();
