@@ -84,7 +84,6 @@ test('the page renders a whole orange on the studio cove without errors', async 
   assert.equal(info.pieces, 1);
   assert.equal(info.cutFaces, 0);
   assert.equal(info.scene, 'studio');
-  assert.equal(info.variety, 'navel');
   assert.equal(info.seed, 11);
   assert.equal(info.physicsReady, true);
   assert.ok(info.gpu.length > 0);
@@ -202,22 +201,6 @@ test('every scene renders and the dark scene is dark', async () => {
   assert.ok(corners.dark < 200, `dark corner ${corners.dark}`);
   assert.ok(corners.studio > 650, `studio corner ${corners.studio}`);
   assert.equal(await page.evaluate(() => window.apelsin.setScene('nowhere')), false);
-  assert.deepEqual(page.errors, []);
-  await page.close();
-});
-
-test('every variety renders with its own flesh colour', async () => {
-  const page = await open('seed=8&preset=halves');
-  const flesh = {};
-  for (const variety of ['navel', 'valencia', 'blood', 'caracara', 'mandarin']) {
-    assert.equal(await page.evaluate((v) => window.apelsin.setVariety(v), variety), true);
-    const info = await page.evaluate(() => window.apelsin.info());
-    assert.equal(info.variety, variety);
-    assert.equal(info.pieces, 2);
-    flesh[variety] = (await pixels(page, 10)).all.fruit;
-  }
-  assert.ok(flesh.blood.g < flesh.navel.g * 0.9, `blood orange is redder ${JSON.stringify(flesh)}`);
-  assert.ok(flesh.caracara.g < flesh.navel.g, 'cara cara flesh is pinker');
   assert.deepEqual(page.errors, []);
   await page.close();
 });
@@ -347,11 +330,10 @@ test('the kitchen shows a bright window behind the board and macro blurs the bac
   await page.close();
 });
 
-async function faceProfile(page, variety) {
-  await page.evaluate(async (v) => {
+async function faceProfile(page) {
+  await page.evaluate(async () => {
     const { quat } = await import('./src/math.js');
     const { restToWorld } = await import('./src/orange/piece.js');
-    window.apelsin.setVariety(v);
     const { world, juice } = window.apelsin.internals;
     world.remove(world.pieces[1]);
     const piece = world.pieces[0];
@@ -360,7 +342,7 @@ async function faceProfile(page, variety) {
     window.apelsin.step(2);
     const centre = restToWorld(piece, [0, piece.caps[0].centroid[1], 0]);
     window.apelsin.camera({ target: centre, yaw: 0, pitch: 1.5, distance: 0.26, fov: (25 * Math.PI) / 180 });
-  }, variety);
+  });
   await page.evaluate(() => window.apelsin.step(20));
   const url = await page.evaluate(() => window.apelsin.screenshot());
   return page.evaluate(async (src) => {
@@ -386,12 +368,9 @@ async function faceProfile(page, variety) {
 
 test('a cut face shows the anatomy across: rind, white pith, flesh, white core, flesh, pith, rind', async () => {
   const page = await open('seed=5&preset=halves&debug', { width: 900, height: 900 });
-  for (const variety of ['navel', 'valencia', 'caracara']) {
-    const profile = await faceProfile(page, variety);
-    const runs = (k) => profile.split('').filter((ch) => ch === k).length;
-    assert.ok(profile.startsWith('w') && profile.endsWith('w') && runs('w') >= 5 && runs('o') >= 4, `${variety} profile across the face ${profile}`);
-    await page.evaluate(() => window.apelsin.preset('halves'));
-  }
+  const profile = await faceProfile(page);
+  const runs = (k) => profile.split('').filter((ch) => ch === k).length;
+  assert.ok(profile.startsWith('w') && profile.endsWith('w') && runs('w') >= 5 && runs('o') >= 4, `profile across the face ${profile}`);
   assert.deepEqual(page.errors, []);
   await page.close();
 });

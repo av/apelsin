@@ -2,7 +2,7 @@ import { createContext } from './gl.js';
 import { createRenderer, TIER_NAMES } from './renderer.js';
 import { createCamera } from './camera.js';
 import { SCENES, SCENE_NAMES } from './scenes.js';
-import { orangeParams, packOrange, VARIETY_NAMES } from './orange/params.js';
+import { orangeParams, packOrange } from './orange/params.js';
 import { createWorld } from './world.js';
 import { createJuice } from './juice.js';
 import { createAudio } from './audio.js';
@@ -34,7 +34,6 @@ function boot() {
 
   const state = {
     scene: pick('scene', SCENE_NAMES, 'studio'),
-    variety: pick('variety', VARIETY_NAMES, 'navel'),
     seed: params.has('seed') ? (parseInt(params.get('seed'), 10) >>> 0) : (Math.random() * 1e9) >>> 0,
     tool: 'knife', preset: 'whole', macro: false, slowmo: false,
     quality: pick('q', TIER_NAMES, phone ? 'medium' : 'high'), forcedQuality: TIER_NAMES.includes(params.get('q')),
@@ -73,7 +72,7 @@ function boot() {
       return state.scene === 'dark' ? 'slate' : 'paper';
     },
     applyJuiceTint() {
-      const tint = juice.setVariety(state.variety);
+      const tint = juice.tint;
       for (const name of ['cove', 'board', 'counter', 'slate']) {
         const prog = renderer.materialProgram(name);
         gl.useProgram(prog.handle);
@@ -85,19 +84,12 @@ function boot() {
       else app.pendingSettle = true;
       for (const p of world.pieces) { p.hasPrev = false; }
     },
-    setVariety(name) {
-      if (!VARIETY_NAMES.includes(name)) return false;
-      state.variety = name;
-      app.applyJuiceTint();
-      app.runPreset(state.preset);
-      return true;
-    },
     newOrange(seed, opts = {}) {
       if (seed === undefined) {
         state.seed = (rng() * 1e9) >>> 0;
         state.preset = 'whole';
       } else state.seed = seed >>> 0;
-      const p = orangeParams(state.variety, state.seed);
+      const p = orangeParams('navel', state.seed);
       renderer.setOrange(packOrange(p));
       world.newOrange(p, { tilt: opts.tilt ?? true });
       ui?.sync();
@@ -129,7 +121,7 @@ function boot() {
       const url = capture(2);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `apelsin-${state.variety}-${state.seed}.png`;
+      a.download = `apelsin-${state.seed}.png`;
       a.click();
     },
   };
@@ -221,7 +213,7 @@ function boot() {
   window.apelsin = {
     ready,
     info: () => ({
-      pieces: world.pieces.length, cutFaces: world.cutFaces(), scene: state.scene, variety: state.variety, seed: state.seed,
+      pieces: world.pieces.length, cutFaces: world.cutFaces(), scene: state.scene, seed: state.seed,
       quality: state.quality, fps: Math.round(1000 / emaMs), gpu: gl.caps.gpu, droplets: juice.count, physicsReady: state.physicsReady,
       tool: state.tool, preset: state.preset, awake: app.physics ? app.physics.awake(world.pieces) : 0, errors: gl.errors.slice(),
       width: renderer.width, height: renderer.height, floatTargets: gl.caps.floatTargets,
@@ -236,7 +228,6 @@ function boot() {
     preset: (name) => app.runPreset(name),
     cut: (point, normal) => world.cut(point, normal),
     setScene: (name) => app.setScene(name),
-    setVariety: (name) => app.setVariety(name),
     newOrange: (seed) => { app.newOrange(seed); state.preset = 'whole'; ui.sync(); return world.pieces.length; },
     setTool: (name) => app.setTool(name),
     step: (frames = 1) => { for (let i = 0; i < frames; i++) frame(1 / 60); return window.apelsin.info(); },

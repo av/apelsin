@@ -1,4 +1,3 @@
-import { VARIETIES } from './orange/params.js';
 import { SCENES } from './scenes.js';
 import { PRESET_NAMES } from './presets.js';
 
@@ -11,11 +10,10 @@ const TOOL_HINTS = {
 export function createUI(app, { test = false } = {}) {
   const $ = (s) => document.querySelector(s);
   const $$ = (s) => [...document.querySelectorAll(s)];
-  const variety = $('#variety'), scene = $('#scene'), hint = $('#hint'), hintText = $('#hint-text'), fps = $('#fps');
+  const scene = $('#scene'), hint = $('#hint'), hintText = $('#hint-text'), fps = $('#fps');
   const touch = matchMedia('(pointer: coarse)').matches;
   const store = (() => { try { return test ? null : window.localStorage; } catch { return null; } })();
   let hintTimer = 0, sliced = store?.getItem('apelsin.sliced') === '1';
-  variety.innerHTML = Object.entries(VARIETIES).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('');
   scene.innerHTML = Object.entries(SCENES).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('');
 
   function showHint(text, ms = 0) {
@@ -31,7 +29,6 @@ export function createUI(app, { test = false } = {}) {
 
   $$('[data-tool]').forEach((b) => b.addEventListener('click', () => { app.setTool(b.dataset.tool); toolHint(b.dataset.tool); }));
   $$('[data-preset]').forEach((b) => b.addEventListener('click', () => app.runPreset(b.dataset.preset)));
-  variety.addEventListener('change', () => { app.setVariety(variety.value); variety.blur(); });
   scene.addEventListener('change', () => { app.setScene(scene.value); scene.blur(); });
   $('#new').addEventListener('click', () => app.newOrange());
   $('#macro').addEventListener('click', () => app.toggle('macro'));
@@ -75,9 +72,7 @@ export function createUI(app, { test = false } = {}) {
     $('#sound .wave').style.display = app.audio.muted ? 'none' : '';
     $('#sound .mute').style.display = app.audio.muted ? '' : 'none';
     $('#sound').setAttribute('aria-pressed', !app.audio.muted);
-    variety.value = s.variety;
     scene.value = s.scene;
-    $('#variety-label').textContent = VARIETIES[s.variety].label.replace(/ \(.*\)/, '');
     $('#scene-label').textContent = SCENES[s.scene].label;
     document.body.classList.toggle('dark', s.scene === 'dark');
   }

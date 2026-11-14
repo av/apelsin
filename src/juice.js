@@ -13,13 +13,7 @@ const MAX_SPLATS = 1024;
 const WATER_LIFE = 50;
 const FILM_LIFE = 1500;
 
-export const JUICE = {
-  navel: { absorb: [0.02, 0.15, 0.85], tint: [0.94, 0.76, 0.38] },
-  valencia: { absorb: [0.02, 0.12, 0.95], tint: [0.95, 0.8, 0.36] },
-  blood: { absorb: [0.07, 1.5, 1.2], tint: [0.86, 0.42, 0.36] },
-  caracara: { absorb: [0.015, 0.4, 0.55], tint: [0.95, 0.64, 0.5] },
-  mandarin: { absorb: [0.02, 0.22, 1.1], tint: [0.95, 0.7, 0.3] },
-};
+const JUICE = { absorb: [0.02, 0.15, 0.85], tint: [0.94, 0.76, 0.38] };
 
 const DROP_VS = FRAME_UBO + `
 layout(location = 0) in vec3 aPos;
@@ -164,7 +158,6 @@ export function createJuice(gl, rng = Math.random) {
   };
   const stats = { splats: 0, drips: 0, area: 0 };
   let time = 0;
-  let absorb = JUICE.navel.absorb;
   const dropProg = program(gl, DROP_VS, DROP_FS, { label: 'droplets' });
   const splatProg = program(gl, SPLAT_VS, SPLAT_FS, { label: 'splat' });
   const dryProg = program(gl, FULLSCREEN_VS, DRY_FS, { label: 'dry' });
@@ -537,7 +530,7 @@ export function createJuice(gl, rng = Math.random) {
     }
     gl.bindBuffer(gl.ARRAY_BUFFER, instBuf);
     gl.bufferSubData(gl.ARRAY_BUFFER, 0, instance, 0, count * 8);
-    use(dropProg, { uOpaque: ctx.targets.hdrCopy, uAbsorb: absorb });
+    use(dropProg, { uOpaque: ctx.targets.hdrCopy, uAbsorb: JUICE.absorb });
     set(dropProg, 'uEnvCube', ctx.ibl.env);
     set(dropProg, 'uKeyCube', ctx.ibl.key);
     gl.enable(gl.BLEND);
@@ -554,7 +547,7 @@ export function createJuice(gl, rng = Math.random) {
     get emitting() { return emitters.length; },
     stats, wetness: wet.colors[0], extent: WET_EXTENT, size: WET_SIZE,
     spawn, emitFromCap, cutBurst, fresh, squeeze, update, draw, addSplat,
-    setVariety(name) { absorb = (JUICE[name] || JUICE.navel).absorb; return (JUICE[name] || JUICE.navel).tint; },
+    tint: JUICE.tint,
     on(name, f) { listeners[name].push(f); },
     prepare(dt) {
       dryTimer += dt;
