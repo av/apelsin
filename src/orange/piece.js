@@ -2,6 +2,7 @@ import { mesh as glMesh } from '../gl.js';
 import { mat4, quat, v3 } from '../math.js';
 import { ATTRIBS } from '../shaders/materials.js';
 import { STRIDE, analyseMesh, raycastMesh } from './mesh.js';
+import { displaceCaps } from './relief.js';
 
 let nextId = 1;
 
@@ -9,7 +10,7 @@ export function createPiece(gl, geometry, pose = {}) {
   const info = analyseMesh(geometry);
   const piece = {
     id: nextId++, geometry, com: info.com, volume: info.volume, radius: info.radius, caps: info.caps,
-    gpu: glMesh(gl, { data: geometry.data, stride: STRIDE, attribs: [[ATTRIBS.aPos, 3], [ATTRIBS.aNormal, 3], [ATTRIBS.aCap, 1]], count: geometry.count }),
+    gpu: glMesh(gl, { data: displaceCaps(geometry), stride: STRIDE, attribs: [[ATTRIBS.aPos, 3], [ATTRIBS.aNormal, 3], [ATTRIBS.aCap, 1]], count: geometry.count }),
     position: pose.position ? pose.position.slice() : info.com.slice(),
     rotation: pose.rotation ? pose.rotation.slice() : quat.identity(),
     model: mat4.create(), prevModel: mat4.create(), body: null, squash: 0, hasPrev: false,

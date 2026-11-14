@@ -104,7 +104,7 @@ export function orangeMesh(p, n = 60) {
   }
   o = stemStub(p, data, o);
   fixWinding(data);
-  return { data, count: tris * 3 };
+  return { data, count: tris * 3, params: p, planes: {} };
 }
 
 function fixWinding(data) {
@@ -130,10 +130,11 @@ export function analyseMesh(mesh) {
     vol += v;
     cx += v * (a[0] + b[0] + c[0]) / 4; cy += v * (a[1] + b[1] + c[1]) / 4; cz += v * (a[2] + b[2] + c[2]) / 4;
     if (data[t + 6] > 0.5) {
-      const n = [data[t + 3], data[t + 4], data[t + 5]], d = v3.dot(n, a);
+      const id = data[t + 6], plane = mesh.planes && mesh.planes[id];
+      const n = plane ? plane.slice(0, 3) : [data[t + 3], data[t + 4], data[t + 5]], d = plane ? plane[3] : v3.dot(n, a);
       const area = v3.len(v3.cross(v3.sub(b, a), v3.sub(c, a))) / 2;
-      let cap = caps.find((k) => v3.dot(k.normal, n) > 0.9999 && Math.abs(k.d - d) < 1e-5);
-      if (!cap) caps.push(cap = { normal: n, d, area: 0, centroid: [0, 0, 0], tris: [] });
+      let cap = caps.find((k) => k.id === id);
+      if (!cap) caps.push(cap = { id, normal: n, d, area: 0, centroid: [0, 0, 0], tris: [] });
       cap.area += area;
       cap.centroid = v3.add(cap.centroid, v3.scale(v3.add(v3.add(a, b), c), area / 3));
       cap.tris.push(a, b, c, area);
@@ -163,6 +164,7 @@ export function hullPoints(mesh, com) {
   const best = DIRS.map(() => [-Infinity, -1]);
   for (let i = 0; i < count; i++) {
     const k = i * S, x = data[k], y = data[k + 1], z = data[k + 2];
+    if (data[k + 6] > 0.5) continue;
     for (let d = 0; d < DIRS.length; d++) {
       const s = x * DIRS[d][0] + y * DIRS[d][1] + z * DIRS[d][2];
       if (s > best[d][0]) { best[d][0] = s; best[d][1] = i; }
