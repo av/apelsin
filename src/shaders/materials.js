@@ -79,9 +79,9 @@ float knifeScores(vec2 p, float px, out vec2 groove) {
   groove = vec2(0.0);
   for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
     vec2 id = c + vec2(i, j);
-    for (int k = 0; k < 3; k++) {
+    for (int k = 0; k < 2; k++) {
       vec3 h = hash33(vec3(id, float(k) + 5.0));
-      if (h.z < 0.5) continue;
+      if (h.z < 0.3) continue;
       vec2 o = (id + h.xy) * cell;
       float ang = 1.5708 + (h.x - 0.5) * 2.0 + step(0.8, fract(h.y * 7.3)) * 0.9;
       vec2 d = vec2(cos(ang), sin(ang));
@@ -133,7 +133,7 @@ Surface materialSurface(SurfaceInput si) {
   vec3 col = mix(base * (1.0 + 0.08 * ringTone), lateCol, late * (0.8 + 0.2 * sh.z));
   float streak = vnoise(vec3(w.x * 6.0, w.y * 160.0, lz * 160.0) + sh * 20.0);
   col *= 0.86 + 0.28 * streak;
-  col *= 1.0 + 0.1 * (fbm3(vec3(w.x * 1.5, w.y * 12.0, lz * 12.0) + sh * 5.0) - 0.5);
+  col *= 1.0 + 0.1 * (vnoise(vec3(w.x * 1.5, w.y * 12.0, lz * 12.0) + sh * 5.0) - 0.5);
   float poreK = 1.0 - smoothstep(0.00012, 0.0004, px);
   vec2 pc = vec2(w.x / 0.0022, r / 0.0002);
   vec2 pcell = floor(pc);
@@ -150,7 +150,7 @@ Surface materialSurface(SurfaceInput si) {
   float top = step(0.5, Ng.y);
   vec2 groove;
   float scores = top > 0.5 && px < 0.0012 ? knifeScores(w.xz, px, groove) * (1.0 - smoothstep(0.0005, 0.0012, px)) : 0.0;
-  float use = (1.0 - smoothstep(0.03, 0.17, length(w.xz * vec2(0.85, 1.25)))) * (0.6 + 0.4 * fbm3(w * 35.0)) * top;
+  float use = (1.0 - smoothstep(0.03, 0.17, length(w.xz * vec2(0.85, 1.25)))) * (0.6 + 0.4 * vnoise(w * 35.0)) * top;
   col = mix(col, col * vec3(1.22, 1.18, 1.1) + 0.012, scores * 0.6);
   col = mix(col, col * 1.06, use * 0.4);
   s.albedo = col;
