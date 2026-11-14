@@ -334,7 +334,8 @@ vec3 photo(vec3 c) {
   float fm = m <= s ? m : m >= W ? 1.0 : s + (1.0 - s) * (1.0 - pow(1.0 - (m - s) / (W - s), 2.0));
   vec3 o = c * (fm / m);
   float over = clamp((m - W) / (W * uPathToWhite), 0.0, 1.0);
-  o = mix(o, vec3(1.0), over * over * (3.0 - 2.0 * over));
+  float ow = over * over * (3.0 - 2.0 * over);
+  o = mix(o, vec3(1.0), vec3(ow, ow, ow * ow));
   float l = dot(o, LUMA);
   o = l + (o - l) * uSaturation;
   return clamp(o, 0.0, 1.0);
