@@ -104,7 +104,7 @@ Ves vesicleCells(vec3 q) {
     vec3 r = g + 0.5 + (h - 0.5) * vec3(0.9, 0.8, 0.8) - f;
     float k = 0.68 + 0.64 * fract(h.x * 13.7 + h.z * 5.3);
     float s = clamp(-r.x / k, -1.0, 1.0);
-    float taper = 1.0 + 0.35 * s;
+    float taper = max(1.0 + 0.3 * s - 0.75 * s * s, 0.25);
     vec3 m = r / (k * vec3(1.0, taper, taper));
     float d = dot(m, m);
     if (d < v.f1) { v.f2 = v.f1; v.f1 = d; v.m = m; v.r = r; v.id = h; v.k = k; v.taper = taper; }
@@ -370,7 +370,7 @@ Surface orangeInterior(SurfaceInput si) {
     flesh *= mix(0.86, 1.06, deep);
     flesh = mix(flesh, wallCol, deepWall * 0.3);
     albedo = mix(flesh, wallCol, wallK * 0.8);
-    albedo = mix(albedo, albedo * vec3(0.92, 0.82, 0.6), ruptured);
+    albedo = mix(albedo, albedo * vec3(0.97, 0.9, 0.75), ruptured);
     float film = smoothstep(0.35, 0.65, vnoise(p * 170.0 + oNoise.zyx));
     rough = mix(0.045, 0.16, wallK) + 0.08 * (1.0 - vdetail);
     rough = mix(rough, 0.035, ruptured);
