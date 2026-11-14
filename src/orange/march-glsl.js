@@ -289,7 +289,7 @@ void main() {
   gPx = si.pixel;
   Surface s;
   if (which < 0) s = rindSurface(si);
-  else s = cutSurface(si, uPlanes[which], reliefNormal(p, which, max(si.pixel * 0.7, 0.00003), hw), Aw, Sw);
+  else s = cutSurface(si, uPlanes[which], (uFlags.x < 1.5 ? uPlanes[which].xyz : reliefNormal(p, which, max(si.pixel * 0.7, 0.00003), hw)), Aw, Sw);
   vec3 diffuse, specular;
   shadeSurface(s, si, diffuse, specular);
   if (termOff(128)) specular = vec3(0.0);

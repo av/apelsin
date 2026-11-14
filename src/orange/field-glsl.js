@@ -191,7 +191,7 @@ float tissueHeight(Anat A, Sac s, float ph) {
   float ridge = 0.000022 * along * along * smoothstep(0.0, 0.6, 1.0 - s.xa * s.xa);
   float h = ridge;
   float f1 = 1.0 - smoothstep(0.00006, 0.00016, gPx);
-  float f2 = 1.0 - smoothstep(0.00003, 0.00008, gPx);
+  float f2 = (1.0 - smoothstep(0.00003, 0.00008, gPx)) * step(1.5, uFlags.x);
   if (f1 > 0.0) {
     vec4 t = tissue(A);
     h += (t.x - 0.5) * 0.000009 * f1 + (t.y - 0.5) * 0.0000035 * f2;
@@ -283,29 +283,43 @@ vec3 fleshBase(float w, vec3 id) {
   return min(c * vec3(0.68, 0.48, 0.45), vec3(1.0));
 }
 
-float deepWalls(vec3 p, vec3 dirIn, int samples, vec3 own, out float septa) {
-  float acc = 0.0, wsum = 0.0;
-  septa = 0.0;
+vec2 tissueTone(Anat A) {
+  vec3 T = tissueCoord(A);
+  vec3 seg = vec3(A.fseg * 7.31, A.fseg * 3.17, oRind.w * 13.0);
+  return vec2(vnoise(vec3(T.x * 1300.0, T.z * 1300.0, T.y * 110.0) + seg + 41.0), vnoise(vec3(T.x * 380.0, T.z * 380.0, T.y * 45.0) + seg + 73.0));
+}
+vec3 fleshVolume(vec3 p, vec3 dirIn, int samples, vec3 surface, out float wallSeen) {
+  vec3 sigA = vec3(0.12, 0.55, 3.2) * 1000.0;
+  vec3 T = vec3(1.0), col = vec3(0.0);
+  float prev = 0.0;
+  wallSeen = 0.0;
   for (int k = 0; k < 6; k++) {
     if (k >= samples) break;
-    float dep = 0.00035 * pow(1.75, float(k) * 6.0 / float(samples));
+    float dep = 0.00025 * pow(10.0, float(k) / max(float(samples - 1), 1.0));
     vec3 q = p + dirIn * dep;
     Anat B = anatomy(q);
-    float T = exp(-dep / 0.0022);
-    float wall = 0.0;
-    if (B.depthP < 0.0 || B.dC < 0.0) wall = 0.5;
-    else if (B.inSeg < 0.0) { septa += T; wall = 0.8; }
+    float ds = dep - prev;
+    prev = dep;
+    vec3 c;
+    float sigS;
+    if (B.depthP < 0.0 || B.dC < 0.0) { c = vec3(0.9, 0.84, 0.62); sigS = 2600.0; }
+    else if (B.inSeg < 0.0) { c = surface * vec3(1.05, 1.2, 1.5) + 0.05; sigS = 1800.0; wallSeen += exp(-dep / 0.001); }
     else {
-      Sac s = sacsAt(B);
-      float ww = 0.00018 + 0.25 * dep;
-      float d = distance(s.id, own) < 1e-4 ? s.second : s.sdf;
-      wall = exp(-(d * d) / (ww * ww));
+      Sac sb = sacsAt(B);
+      vec2 tt = tissueTone(B);
+      float wall = exp(-(sb.sdf * sb.sdf) / (0.00012 * 0.00012 + dep * dep * 0.03));
+      c = fleshBase(clamp(B.depthP / B.pulpD, 0.0, 1.0), vec3(tt.x, tt.y, mix(tt.x, tt.y, 0.5)));
+      c = mix(c, min(c * vec3(1.03, 1.16, 1.4), vec3(1.0)), wall * 0.9);
+      sigS = 300.0 + 4000.0 * wall;
+      wallSeen += wall * exp(-dep / 0.001);
     }
-    acc += wall * T;
-    wsum += T;
+    float a = 1.0 - exp(-sigS * ds);
+    col += T * a * c;
+    T *= exp(-(sigA + sigS) * ds);
   }
-  septa /= max(wsum, 1e-6);
-  return acc / max(wsum, 1e-6);
+  col += T * surface * vec3(0.92, 0.7, 0.45);
+  wallSeen /= float(samples);
+  return col;
 }
 
 Surface cutSurface(SurfaceInput si, vec4 plane, vec3 Nrest, Anat A, Sac sacIn) {
@@ -437,17 +451,16 @@ Surface cutSurface(SurfaceInput si, vec4 plane, vec3 Nrest, Anat A, Sac sacIn) {
     float gap = 0.0;
     float juice = termOff(32) ? 0.0 : juiceLevel(p);
     float inner = clamp(s.e, 0.0, 1.0);
-    int samples = tier < 0.5 ? 0 : tier < 1.5 ? 1 : 2;
-    float septa = 0.0, deep = 0.35;
-    if (samples > 0 && !termOff(4)) {
-      vec3 dirIn = refract(-Vr, n, 1.0 / 1.35);
-      if (dot(dirIn, dirIn) < 0.5) dirIn = -n;
-      deep = deepWalls(p, dirIn, samples, s.id, septa);
-    }
     float lowF = smoothstep(0.2, 0.8, tis.w * 0.6 + tis.z * 0.4);
     flesh *= mix(vec3(1.0, 0.82, 0.55), vec3(1.0, 1.1, 1.25), lowF);
-    flesh = mix(flesh * vec3(1.0, 0.9, 0.74), mix(flesh, wallCol, 0.25), smoothstep(0.1, 0.9, deep));
-    flesh = mix(flesh, flesh * vec3(1.03, 1.1, 1.25), septa * 0.35);
+    int vs = tier < 0.5 ? 0 : tier < 1.5 ? 1 : 3;
+    if (vs > 0 && !termOff(4)) {
+      vec3 dirIn = refract(-Vr, n, 1.0 / 1.35);
+      if (dot(dirIn, dirIn) < 0.5) dirIn = -n;
+      float ws;
+      vec3 vol = fleshVolume(p, dirIn, vs, flesh, ws);
+      flesh = mix(flesh, vol * 1.25, 0.85);
+    }
     vec3 gapCol = flesh * vec3(0.97, 0.9, 0.75);
     albedo = mix(flesh, gapCol, gap);
     float wrinkleK = (1.0 - smoothstep(0.00006, 0.00025, px)) * step(0.5, tier);
@@ -481,6 +494,26 @@ Surface cutSurface(SurfaceInput si, vec4 plane, vec3 Nrest, Anat A, Sac sacIn) {
     rough = mix(rough, max(rough, 0.26), (1.0 - wrinkleK) * (1.0 - film) * (1.0 - gap * juice));
     rough = mix(rough, 0.7, graze);
     clear *= 1.0 - graze;
+    if (!termOff(32)) {
+      vec3 T = tissueCoord(A);
+      vec3 rh = normalize(vec3(p.x, 0.0, p.z) + 1e-7);
+      vec3 eP = vec3(-rh.z, 0.0, rh.x);
+      vec3 gArc = eP + rh * (A.u * A.segW * 0.5);
+      vec3 gAlong = rh + vec3(0.0, 0.22, 0.0);
+      vec3 gAx = vec3(0.0, 1.0, 0.0) - 0.22 * rh;
+      vec3 seg = vec3(A.fseg * 5.1, oRind.w * 3.0, ph * 4.0);
+      vec4 m1 = noiseD(vec3(T.x * 2800.0, T.y * 650.0, T.z * 2800.0) + seg);
+      float f1 = 1.0 - smoothstep(0.00012, 0.00035, px), f2 = (1.0 - smoothstep(0.00005, 0.00014, px)) * step(1.5, uFlags.x);
+      vec4 m2 = f2 > 0.0 ? noiseD(vec3(T.x * 6500.0, T.y * 1500.0, T.z * 6500.0) + seg + 11.0) : vec4(0.0);
+      vec3 g = (m1.y * 2800.0 * gArc + m1.z * 650.0 * gAlong + m1.w * 2800.0 * gAx) * 0.0002 * f1
+             + (m2.y * 6500.0 * gArc + m2.z * 1500.0 * gAlong + m2.w * 6500.0 * gAx) * 0.00004 * f2;
+      gN += (g - n * dot(g, n)) * (1.0 - memK);
+      float lost = 0.45 * (1.0 - f1) + 0.08 * (1.0 - f2);
+      float wetCover = smoothstep(0.12, 0.3, vnoise(p * 180.0 + oNoise.xzy) * 0.6 + vnoise(p * 700.0 + ph) * 0.4);
+      float rb = mix(0.035, 0.1, m1.x);
+      rough = mix(rough, mix(0.24, sqrt(rb * rb + lost * 0.25), wetCover), 1.0 - memK);
+      clear = 0.0;
+    }
     cavity = mix(1.0, 0.9, gap * (1.0 - juice)) * mix(1.0, 0.3, graze);
     profile = memK * thick > 0.5 ? 2.0 : 3.0;
     width = profile > 2.5 ? 0.6 : 0.35;
