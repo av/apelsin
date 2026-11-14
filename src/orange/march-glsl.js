@@ -292,6 +292,7 @@ void main() {
   else s = cutSurface(si, uPlanes[which], reliefNormal(p, which, max(si.pixel * 0.7, 0.00003), hw), Aw, Sw);
   vec3 diffuse, specular;
   shadeSurface(s, si, diffuse, specular);
+  if (termOff(128)) specular = vec3(0.0);
   outDiffuse = vec4(diffuse * OUTPUT_SCALE, encodeProfile(s));
   outSpecular = vec4(specular * OUTPUT_SCALE, 1.0);
   outAlbedo = vec4(s.albedo, 1.0);

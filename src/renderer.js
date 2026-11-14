@@ -44,7 +44,7 @@ export function createRenderer(gl, canvas, { tier = 'high' } = {}) {
   const shadows = createShadows(gl, TIERS[tier].shadow, TIERS[tier].ground);
   const post = createPost(gl);
   const prepassProg = program(gl, UBER_VS, uberFragment(null, 'prepass'), { label: 'prepass' });
-  const TERMS = { wall: 1, cell: 2, deep: 4, strand: 8, relief: 16, wet: 32, sacheight: 64 };
+  const TERMS = { wall: 1, cell: 2, deep: 4, strand: 8, relief: 16, wet: 32, sacheight: 64, spec: 128 };
   const debugTerm = (new URLSearchParams(location.search).get('debugterm') || '').split(',').reduce((m, k) => m | (TERMS[k] || 0), 0);
   const termDefs = debugTerm ? { DEBUGTERM: debugTerm } : {};
   const pieceProgs = {
