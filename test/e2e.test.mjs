@@ -288,3 +288,188 @@ test('without webgl2 the page shows a short message instead of a blank page', as
   assert.match(await page.textContent('#nogl'), /WebGL2/);
   await page.close();
 });
+
+async function openTouch(query = '', viewport = { width: 390, height: 780 }) {
+  const context = await browser.newContext({ viewport, hasTouch: true, isMobile: true, deviceScaleFactor: 2 });
+  const page = await context.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto(`${base}?test&${query}`);
+  await page.waitForFunction(() => window.apelsin?.ready);
+  await page.evaluate(() => window.apelsin.ready);
+  page.errors = errors;
+  page.context = context;
+  return page;
+}
+
+function project(page, point) {
+  return page.evaluate((p) => window.apelsin.project(p), point);
+}
+
+test('a knife follows the pointer stroke and the cut lands on release with sound and juice', async () => {
+  const page = await open('seed=5');
+  await page.evaluate(() => window.apelsin.step(2));
+  const [cx, cy] = await project(page, [0, 0.04, 0]);
+  await page.mouse.move(cx - 220, cy - 60);
+  await page.mouse.down();
+  for (let i = 1; i <= 12; i++) { await page.mouse.move(cx - 220 + i * 37, cy - 60 + i * 10); await page.evaluate(() => window.apelsin.step(1)); }
+  const mid = await page.evaluate(() => window.apelsin.info());
+  assert.equal(mid.knife, true, 'the blade is drawn while the stroke is in progress');
+  assert.equal(mid.pieces, 1, 'nothing is cut before release');
+  await page.mouse.up();
+  const after = await page.evaluate(() => window.apelsin.step(2));
+  assert.equal(after.pieces, 2);
+  assert.ok(after.droplets > 20, `juice burst ${after.droplets}`);
+  const later = await page.evaluate(() => window.apelsin.step(60));
+  assert.equal(later.knife, false, 'the blade leaves after the cut');
+  assert.ok(later.splats > 0, 'juice lands on the floor');
+  await page.evaluate(() => window.apelsin.camera({ pitch: 1.3, yaw: 1.1 }));
+  await page.evaluate(() => window.apelsin.step(240));
+  const pieces = await page.evaluate(() => window.apelsin.poses());
+  const [px, py] = await project(page, pieces[0].position);
+  await page.mouse.move(px - 160, py + 40);
+  await page.mouse.down();
+  for (let i = 1; i <= 12; i++) await page.mouse.move(px - 160 + i * 27, py + 40 - i * 7);
+  await page.mouse.up();
+  const top = await page.evaluate(() => window.apelsin.step(2));
+  assert.ok(top.pieces >= 3, 'a piece is cut again from a top-down angle');
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
+
+test('cut pieces settle without sinking into the floor or into each other', async () => {
+  const page = await open('seed=7');
+  await page.evaluate(() => window.apelsin.cut([0, 0.035, 0], [0.8, 0.5, 0.2]));
+  await page.evaluate(() => window.apelsin.cut([0, 0.03, 0], [0.1, 0.2, 1]));
+  const info = await page.evaluate(() => window.apelsin.step(600));
+  assert.ok(info.pieces >= 3);
+  const gaps = await page.evaluate(() => window.apelsin.contacts());
+  assert.ok(gaps.floor > -0.0015, `pieces rest on the floor (${gaps.floor})`);
+  assert.ok(gaps.overlap < 0.002, `pieces do not interpenetrate (${gaps.overlap})`);
+  const a = await page.evaluate(() => window.apelsin.poses());
+  await page.evaluate(() => window.apelsin.step(300));
+  const b = await page.evaluate(() => window.apelsin.poses());
+  const drift = Math.max(...a.map((p, i) => Math.hypot(...p.position.map((v, k) => v - b[i].position[k]))));
+  assert.ok(drift < 0.002, `settled pieces stay put (${drift})`);
+  await page.close();
+});
+
+test('squeezing a cut face squashes the piece, jets juice and wets the floor', async () => {
+  const page = await open('seed=9&preset=halves');
+  await page.evaluate(() => window.apelsin.setTool('squeeze'));
+  const pieces = await page.evaluate(() => window.apelsin.poses());
+  const [x, y] = await project(page, pieces[0].position);
+  const before = await page.evaluate(() => window.apelsin.info());
+  await page.mouse.move(x, y - 8);
+  await page.mouse.down();
+  await page.evaluate(() => window.apelsin.step(20));
+  const early = await page.evaluate(() => window.apelsin.info());
+  await page.evaluate(() => window.apelsin.step(60));
+  const held = await page.evaluate(() => window.apelsin.info());
+  await page.mouse.up();
+  assert.ok(early.squash > 0.03, `piece squashes ${early.squash}`);
+  assert.ok(held.droplets > early.droplets * 0.8 && held.droplets > 40, `juice jets ${early.droplets} -> ${held.droplets}`);
+  const after = await page.evaluate(() => window.apelsin.step(180));
+  assert.ok(after.splats > before.splats + 30, `floor gets wet ${before.splats} -> ${after.splats}`);
+  assert.ok(after.squash < 0.01, 'the piece springs back');
+  const wet = await page.evaluate(() => window.apelsin.wetness());
+  assert.ok(wet > 0.0001, `wet area ${wet}`);
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
+
+test('presets are deterministic and stay still for 600 more frames', async () => {
+  const pageA = await open('seed=31');
+  const pageB = await open('seed=31');
+  for (const name of ['halves', 'wedges', 'wheels', 'reference']) {
+    const poses = [];
+    for (const page of [pageA, pageB]) {
+      await page.evaluate((n) => window.apelsin.preset(n), name);
+      poses.push(await page.evaluate(() => window.apelsin.step(30) && window.apelsin.poses()));
+    }
+    assert.deepEqual(poses[0].map((p) => p.position), poses[1].map((p) => p.position), `${name} is deterministic`);
+    await pageA.evaluate(() => window.apelsin.step(600));
+    const later = await pageA.evaluate(() => window.apelsin.poses());
+    const drift = Math.max(...later.map((p, i) => Math.hypot(...p.position.map((v, k) => v - poses[0][i].position[k]))));
+    assert.ok(drift < 1e-4, `${name} drift ${drift}`);
+    const gaps = await pageA.evaluate(() => window.apelsin.contacts());
+    assert.ok(gaps.floor > -0.0015 && gaps.overlap < 0.0025, `${name} rests cleanly ${JSON.stringify(gaps)}`);
+  }
+  assert.deepEqual(pageA.errors, []);
+  await pageA.close();
+  await pageB.close();
+});
+
+test('slow motion runs physics and juice at a quarter speed', async () => {
+  const fall = async (slow) => {
+    const page = await open('seed=12');
+    if (slow) assert.equal(await page.evaluate(() => window.apelsin.toggle('slowmo')), true);
+    await page.evaluate(() => window.apelsin.cut([0, 0.04, 0], [1, 0, 0]));
+    const a = await page.evaluate(() => window.apelsin.poses());
+    const info = await page.evaluate(() => window.apelsin.step(12));
+    const b = await page.evaluate(() => window.apelsin.poses());
+    await page.close();
+    return { move: Math.max(...a.map((p, i) => Math.hypot(...p.position.map((v, k) => v - b[i].position[k])))), info };
+  };
+  const normal = await fall(false), slow = await fall(true);
+  assert.equal(slow.info.slowmo, true);
+  assert.ok(slow.move < normal.move * 0.5, `slow-mo ${slow.move} vs ${normal.move}`);
+  assert.ok(slow.info.droplets > normal.info.droplets, 'juice lingers in the air');
+});
+
+test('on a phone a one-finger swipe slices, two fingers orbit and zoom, the toolbar fits', async () => {
+  const page = await openTouch('seed=5');
+  await page.evaluate(() => window.apelsin.step(2));
+  const bar = await page.evaluate(() => [...document.querySelectorAll('#bar button, #bar .pick')].map((b) => { const r = b.getBoundingClientRect(); return [r.left, r.right, r.top, r.bottom, r.height]; }));
+  for (const [l, r, t, b, h] of bar) {
+    assert.ok(l >= 0 && r <= 390 && t >= 0 && b <= 780, 'toolbar buttons are on screen');
+    assert.ok(h >= 44, `touch target ${h}`);
+  }
+  const cdp = await page.context.newCDPSession(page);
+  const touch = (type, points) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: points.map(([x, y], id) => ({ x, y, id })) });
+  const [cx, cy] = await project(page, [0, 0.04, 0]);
+  const cam0 = await page.evaluate(() => window.apelsin.camera({}));
+  await touch('touchStart', [[cx - 60, cy - 30], [cx + 60, cy + 30]]);
+  for (let i = 1; i <= 8; i++) { await touch('touchMove', [[cx - 60 - i * 6, cy - 30 - i * 3], [cx + 60 + i * 6, cy + 30 + i * 3]]); await page.evaluate(() => window.apelsin.step(1)); }
+  await touch('touchEnd', []);
+  const cam1 = await page.evaluate(() => window.apelsin.step(2) && window.apelsin.camera({}));
+  assert.ok(cam1.distance < cam0.distance * 0.95, `pinch zooms ${cam0.distance} -> ${cam1.distance}`);
+  assert.equal((await page.evaluate(() => window.apelsin.info())).pieces, 1, 'two fingers never cut');
+  const [sx, sy] = await project(page, [0, 0.04, 0]);
+  await touch('touchStart', [[sx - 130, sy - 20]]);
+  for (let i = 1; i <= 10; i++) { await touch('touchMove', [[sx - 130 + i * 26, sy - 20 + i * 4]]); await page.evaluate(() => window.apelsin.step(1)); }
+  await touch('touchEnd', []);
+  const info = await page.evaluate(() => window.apelsin.step(2));
+  assert.equal(info.pieces, 2, 'a swipe slices');
+  const scroll = await page.evaluate(() => [window.scrollX, window.scrollY, window.visualViewport.scale]);
+  assert.deepEqual(scroll, [0, 0, 1], 'the page never scrolls or zooms');
+  assert.deepEqual(page.errors, []);
+  await page.context.close();
+});
+
+test('the page has a title, description, social tags and an orange favicon; the hint fades after the first cut', async () => {
+  const page = await open('seed=5');
+  assert.match(await page.title(), /Apelsin/);
+  const meta = await page.evaluate(() => ({
+    description: document.querySelector('meta[name=description]')?.content,
+    og: document.querySelector('meta[property="og:title"]')?.content,
+    icon: document.querySelector('link[rel=icon]')?.href,
+    tips: [...document.querySelectorAll('#bar [data-tip]')].map((b) => b.dataset.tip),
+  }));
+  assert.ok(meta.description.length > 40);
+  assert.ok(meta.og);
+  assert.match(meta.icon, /^data:image\/svg\+xml/);
+  assert.ok(meta.tips.includes('Knife · K') && meta.tips.some((t) => /Slow motion/.test(t)));
+  assert.equal(await page.evaluate(() => document.getElementById('hint').classList.contains('gone')), false);
+  await page.evaluate(() => window.apelsin.cut([0, 0.04, 0], [1, 0, 0]));
+  assert.equal(await page.evaluate(() => document.getElementById('hint').classList.contains('gone')), false, 'api cuts are not user cuts');
+  const [cx, cy] = await project(page, [0, 0.04, 0]);
+  await page.mouse.move(cx + 10, cy - 200);
+  await page.mouse.down();
+  for (let i = 1; i <= 10; i++) await page.mouse.move(cx + 10, cy - 200 + i * 40);
+  await page.mouse.up();
+  assert.equal(await page.evaluate(() => document.getElementById('hint').classList.contains('gone')), true);
+  await page.keyboard.press('t');
+  assert.equal((await page.evaluate(() => window.apelsin.info())).slowmo, true);
+  await page.close();
+});

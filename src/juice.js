@@ -162,7 +162,7 @@ export function createJuice(gl, rng = Math.random) {
     const i = Math.floor((x / WET_EXTENT * 0.5 + 0.5) * POOL), j = Math.floor((z / WET_EXTENT * 0.5 + 0.5) * POOL);
     return i < 0 || j < 0 || i >= POOL || j >= POOL ? -1 : j * POOL + i;
   };
-  const stats = { splats: 0, drips: 0 };
+  const stats = { splats: 0, drips: 0, area: 0 };
   let time = 0;
   let absorb = JUICE.navel.absorb;
   const dropProg = program(gl, DROP_VS, DROP_FS, { label: 'droplets' });
@@ -375,6 +375,7 @@ export function createJuice(gl, rng = Math.random) {
     if (splats.length >= MAX_SPLATS) return;
     splats.push([x, z, radius, amount, stretch[0], stretch[1], rng() * 100, water]);
     stats.splats++;
+    stats.area += Math.PI * radius * radius * 0.5 * (1 + Math.hypot(stretch[0], stretch[1]));
   }
 
   function impact(x, z, r, v) {
@@ -560,6 +561,6 @@ export function createJuice(gl, rng = Math.random) {
       if (dryTimer > 0.25) { dry(dryTimer); dryTimer = 0; }
       renderWetness();
     },
-    clear() { count = 0; mist = 0; anchor.fill(null); splats.length = 0; emitters.length = 0; pool.fill(0); wetDirty = true; },
+    clear() { count = 0; mist = 0; anchor.fill(null); splats.length = 0; emitters.length = 0; pool.fill(0); stats.area = 0; wetDirty = true; },
   };
 }

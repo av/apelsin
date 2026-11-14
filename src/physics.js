@@ -7,7 +7,8 @@ const ROLL_DAMP = 0.9;
 const REST_SPEED = 0.006;
 const REST_SPIN = 0.12;
 const REST_TIME = 0.3;
-const GROUP_STATIC = 0x0001, GROUP_BALL = 0x0002;
+const MIN_BALL = 0.0018;
+const GROUP_STATIC = 0x0001, GROUP_BALL = 0x0002, GROUP_TOUCH = 0x0004;
 const groups = (member, filter) => (member << 16) | filter;
 
 function exitDistance(piece, p, d, rmax) {
@@ -50,7 +51,7 @@ export function contactBalls(piece) {
   };
   const candidates = Math.min(tris, 3200);
   const stride = tris / candidates;
-  for (let k = 0; k < candidates && balls.length < 500; k++) {
+  for (let k = 0; k < candidates && balls.length < 360; k++) {
     const t = ((Math.floor(k * stride) * 7919) % tris) * 3 * S;
     const c = [0, 1, 2].map((j) => (data[t + j] + data[t + S + j] + data[t + 2 * S + j]) / 3);
     const n = v3.norm([0, 1, 2].map((j) => data[t + 3 + j] + data[t + S + 3 + j] + data[t + 2 * S + 3 + j]));
@@ -63,7 +64,11 @@ export function contactBalls(piece) {
       const room = Math.sqrt(Math.max(0, rmax * rmax - v3.dot(c, n) ** 2)) - v3.len(planar);
       r = Math.min(flatMax, thick * 0.45, Math.max(0.0012, room));
     } else r = Math.min(v3.len(c) * 0.35, thick * 0.47, 0.012);
-    r = Math.max(0.001, r);
+    for (const cap of piece.caps) {
+      const k = 1 + v3.dot(inward, cap.normal);
+      if (k > 1e-3) r = Math.min(r, (cap.d - v3.dot(c, cap.normal)) / k);
+    }
+    if (r < MIN_BALL) continue;
     const centre = v3.add(c, v3.scale(inward, r));
     if (near(centre, r * (flat ? 0.8 : 0.4))) continue;
     const key = cellKey(...centre);
@@ -79,7 +84,7 @@ export async function createPhysics(rapierUrl = '../vendor/rapier/rapier.mjs') {
   await R.init();
   const world = new R.World({ x: 0, y: -9.81, z: 0 });
   world.timestep = STEP;
-  world.numSolverIterations = 8;
+  world.numSolverIterations = 6;
   world.lengthUnit = 0.05;
   const events = new R.EventQueue(true);
   const statics = [];
@@ -96,7 +101,7 @@ export async function createPhysics(rapierUrl = '../vendor/rapier/rapier.mjs') {
     staticHandles.clear();
     for (const c of list) {
       const body = world.createRigidBody(R.RigidBodyDesc.fixed().setTranslation(...c.centre));
-      const col = world.createCollider(R.ColliderDesc.cuboid(c.size[0] / 2, c.size[1] / 2, c.size[2] / 2).setFriction(0.85).setRestitution(0.1).setCollisionGroups(groups(GROUP_STATIC, GROUP_BALL)), body);
+      const col = world.createCollider(R.ColliderDesc.cuboid(c.size[0] / 2, c.size[1] / 2, c.size[2] / 2).setFriction(0.85).setRestitution(0.1).setCollisionGroups(groups(GROUP_STATIC, GROUP_BALL | GROUP_TOUCH)), body);
       staticHandles.add(col.handle);
       statics.push(body);
     }
@@ -114,10 +119,19 @@ export async function createPhysics(rapierUrl = '../vendor/rapier/rapier.mjs') {
     world.createCollider(mass.setDensity(950).setCollisionGroups(0), body);
     const whole = piece.caps.length === 0;
     const friction = whole ? 0.75 : 0.9, restitution = whole ? 0.22 : 0.08;
-    for (const [x, y, z, r, wet] of contactBalls(piece)) {
+    const balls = contactBalls(piece);
+    const touching = new Set();
+    for (const b of balls.slice().sort((a, c) => c[3] - a[3])) {
+      let free = true;
+      for (const t of touching) if (Math.hypot(t[0] - b[0], t[1] - b[1], t[2] - b[2]) < 0.5 * (t[3] + b[3])) { free = false; break; }
+      if (free) touching.add(b);
+    }
+    for (const spec of balls) {
+      const [x, y, z, r, wet] = spec;
+      const member = touching.has(spec) ? GROUP_TOUCH : GROUP_BALL;
       const ball = world.createCollider(R.ColliderDesc.ball(r + 0.0001).setTranslation(x, y, z).setDensity(0)
         .setFriction(wet ? 0.35 : friction).setFrictionCombineRule(wet ? R.CoefficientCombineRule.Min : R.CoefficientCombineRule.Average)
-        .setRestitution(restitution).setCollisionGroups(groups(GROUP_BALL, GROUP_STATIC | GROUP_BALL))
+        .setRestitution(restitution).setCollisionGroups(groups(member, member === GROUP_TOUCH ? GROUP_STATIC | GROUP_TOUCH : GROUP_STATIC))
         .setActiveEvents(R.ActiveEvents.CONTACT_FORCE_EVENTS).setContactForceEventThreshold(0.002), body);
       owner.set(ball.handle, piece);
     }

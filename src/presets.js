@@ -83,7 +83,7 @@ const LAYOUTS = {
     const pieces = app.world.pieces.slice().sort((a, b) => a.com[1] - b.com[1]);
     const ends = [pieces[0], pieces[pieces.length - 1]];
     const wheels = pieces.slice(1, -1);
-    const step = app.world.params.a * 1.62;
+    const step = app.world.params.a * 1.7;
     wheels.forEach((p, i) => {
       const s = i - (wheels.length - 1) / 2;
       const rot = quat.mul(quat.axisAngle(right, 0), quat.axisAngle([0, 1, 0], i * 1.3));

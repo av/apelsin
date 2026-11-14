@@ -1,4 +1,4 @@
-import { orangeMesh, hullPoints } from './orange/mesh.js';
+import { orangeMesh, hullPoints, shapeRadius } from './orange/mesh.js';
 import { slicePiece } from './orange/slice.js';
 import { createPiece, updateModel, disposePiece, worldToRest, worldDirToRest, restToWorld, drawable } from './orange/piece.js';
 import { quat, v3, mulberry32 } from './math.js';
@@ -120,6 +120,30 @@ export function createWorld(gl, { juice, audio }) {
     for (const p of w.pieces) updateModel(p);
   }
 
+  function depthInside(piece, rest) {
+    const r = v3.len(rest);
+    if (r < 1e-6) return Infinity;
+    let depth = shapeRadius(w.params, v3.scale(rest, 1 / r)) - r;
+    for (const c of piece.caps) depth = Math.min(depth, c.d - v3.dot(rest, c.normal));
+    return depth;
+  }
+
+  function contacts() {
+    let floor = Infinity, overlap = 0;
+    for (const p of w.pieces) {
+      floor = Math.min(floor, p.position[1] + lowestY(p) - w.floorAt(p.position[0], p.position[2]));
+      const h = hull(p);
+      for (const q of w.pieces) {
+        if (q === p || v3.len(v3.sub(p.position, q.position)) > p.radius + q.radius) continue;
+        for (let i = 0; i < h.length; i += 3) {
+          const world = v3.add(quat.rotate(p.rotation, [h[i], h[i + 1], h[i + 2]]), p.position);
+          overlap = Math.max(overlap, depthInside(q, worldToRest(q, world)));
+        }
+      }
+    }
+    return { floor: Number.isFinite(floor) ? floor : 0, overlap };
+  }
+
   function cutFaces() { return w.pieces.reduce((s, p) => s + p.caps.length, 0); }
 
   function bounds() {
@@ -129,6 +153,6 @@ export function createWorld(gl, { juice, audio }) {
     return { centre: lo.map((v, k) => (v + hi[k]) / 2), radius: Math.hypot(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]) / 2 };
   }
 
-  Object.assign(w, { add, remove, clear, place, newOrange, cut, attachPhysics, update, cutFaces, bounds, lowestY, originWorld, drawables: () => w.pieces.map(drawable) });
+  Object.assign(w, { add, remove, clear, place, newOrange, cut, attachPhysics, update, cutFaces, contacts, bounds, lowestY, originWorld, drawables: () => w.pieces.map(drawable) });
   return w;
 }
