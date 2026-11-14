@@ -298,7 +298,8 @@ Surface orangeInterior(SurfaceInput si) {
   orangeSegment(psi + wave, seg, rel, segW, edge);
   float fseg = float(seg);
   float dS = edge * rho;
-  float dD = depth - peel;
+  float gap = oExtra.w > 0.0 ? 0.0016 * yN * yN * yN * yN * (0.5 + pv.x) : 0.0;
+  float dD = depth - peel - gap;
   float dC = rho - coreR;
   float kC = 0.0038 + 0.0024 * fract(fseg * 0.37 + oRind.w), kD = 0.0012;
   float segD = smin(smin(dS, dD, kD), dC, kC);
@@ -390,6 +391,8 @@ Surface orangeInterior(SurfaceInput si) {
   }
   float halo = (1.0 - smoothstep(memW, memW + 0.0006 + px, segD)) * (1.0 - step(segD, memW * 0.4));
   albedo = mix(albedo, mix(albedo, oFleshWall.rgb, 0.6), halo * 0.6);
+  clear = mix(clear, 0.55, halo);
+  ccRough = mix(ccRough, 0.015, halo);
   float segFlesh = smoothstep(memW * 0.4, memW, segD);
   float memCore = 1.0 - smoothstep(0.0, 0.003, dC);
   float thick = max(fill, memCore * 0.6);
@@ -416,12 +419,12 @@ Surface orangeInterior(SurfaceInput si) {
     float cr = clamp(rho / max(coreR, 1e-4), 0.0, 1.0);
     vec3 cg = ePsi * fib.y * 0.18 + pore.yzw * 0.006 + rhoHat * (-2.0 * 0.0007 * cr / max(coreR, 1e-4));
     float isHollow = 1.0 - smoothstep(hollow * 0.9, hollow * 1.1 + px, rho);
-    coreCol = mix(coreCol, oFleshDeep.rgb * 0.18, isHollow);
+    coreCol = mix(coreCol, coreCol * vec3(0.75, 0.66, 0.48), isHollow);
     albedo = mix(albedo, coreCol, coreK);
     rough = mix(rough, mix(0.65, 0.45, tuftN), coreK);
     clear = mix(clear, 0.1, coreK);
     gN = mix(gN, cg, coreK);
-    cavity = mix(cavity, mix(1.0, 0.7, holes) * mix(1.0, 0.25, isHollow), coreK);
+    cavity = mix(cavity, mix(1.0, 0.7, holes) * mix(1.0, 0.5, isHollow), coreK);
   }
   for (int i = 0; i < 6; i++) {
     vec4 sd = oSeeds[i];
@@ -433,8 +436,9 @@ Surface orangeInterior(SurfaceInput si) {
     float e = length(loc);
     float inSeed = (1.0 - smoothstep(0.9, 1.0, e)) * step(-0.5, o.y / sd.w) * step(o.y / sd.w, 0.5);
     if (inSeed > 0.0) {
-      vec3 kernel = mix(vec3(0.82, 0.84, 0.64), vec3(0.74, 0.8, 0.5), vnoise(o * 3000.0) * 0.5);
-      vec3 sc = mix(kernel, vec3(0.807, 0.716, 0.527), smoothstep(0.6, 0.78, e));
+      vec3 kernel = mix(vec3(0.8, 0.84, 0.6), vec3(0.68, 0.76, 0.42), vnoise(o * 3000.0) * 0.6);
+      vec3 sc = mix(kernel, vec3(0.72, 0.62, 0.44), smoothstep(0.62, 0.72, e));
+      sc = mix(sc, vec3(0.82, 0.74, 0.56), smoothstep(0.74, 0.86, e));
       sc = mix(sc, vec3(0.694, 0.584, 0.392), smoothstep(0.7, 1.0, t) * 0.75);
       sc *= 1.0 - 0.25 * smoothstep(0.85, 0.98, e);
       sc = mix(sc, oFleshDeep.rgb * 0.5, smoothstep(0.93, 1.0, e) * 0.7);
@@ -445,9 +449,32 @@ Surface orangeInterior(SurfaceInput si) {
       profile = mix(profile, 2.0, inSeed);
     }
   }
+  if (oExtra.z > 0.0 && p.y < -oShape.y * 0.4) {
+    float fs = oExtra.z / 0.1;
+    vec3 fc = vec3(0.0, -oShape.y + peel + 0.0055 * fs, 0.0);
+    vec3 fq = (p - fc) / (vec3(0.0085, 0.0065, 0.0085) * fs);
+    float fe = length(fq) * (0.94 + 0.12 * vnoise(fq * 4.0 + oNoise.xyz));
+    if (fe < 1.2) {
+      float fa = atan(fq.z, fq.x + 1e-6) * 7.0 / 6.2831853 + oRind.w;
+      float fedge = abs(fract(fa) - 0.5) * 2.0;
+      float frad = length(fq.xz);
+      vec3 fflesh = mix(oFlesh.rgb, oFleshWall.rgb, 0.25) * (0.88 + 0.24 * vnoise(fq * vec3(9.0, 3.0, 9.0) + 5.0));
+      float fsep = 1.0 - smoothstep(0.05, 0.12, (1.0 - fedge) * frad * 3.14);
+      float fwrap = smoothstep(0.8, 0.9, fe);
+      float fcore = 1.0 - smoothstep(0.08, 0.16, frad);
+      vec3 fcol = mix(fflesh, vec3(0.93, 0.9, 0.74), max(max(fsep, fwrap), fcore));
+      float fcav = smoothstep(1.0, 1.04, fe) * (1.0 - smoothstep(1.06, 1.12, fe));
+      fcol = mix(fcol, oFleshDeep.rgb * 0.55, fcav * 0.6);
+      float fk = 1.0 - smoothstep(1.14, 1.2, fe);
+      albedo = mix(albedo, fcol, fk);
+      gN *= 1.0 - fk;
+      rough = mix(rough, mix(0.1, 0.5, max(fsep, fwrap)), fk);
+      cavity *= 1.0 - 0.6 * fcav * fk;
+    }
+  }
   float pithK = 1.0 - smoothstep(-px * 0.6, px * 0.6, dD);
   float flav = 0.0, glandK = 0.0;
-  if (depth < peel + 0.001) {
+  if (depth < peel + gap + 0.001) {
     vec4 pebS = noiseD(d * R * 260.0 + oNoise.yzx);
     vec3 sq = d * R * oGland.x + oNoise.xyz + pebS.yzw * 0.3;
     Gland gl = glandCells(sq, d);
@@ -490,13 +517,15 @@ Surface orangeInterior(SurfaceInput si) {
     float dorsal = (1.0 - smoothstep(0.00004, 0.0001 + px * 0.5, abs(depth - peel + 0.00006))) * (1.0 - memK);
     pithCol = mix(pithCol, vec3(0.98, 0.93, 0.7), dorsal * 0.7);
     vec3 pg = fib.yzw * vec3(0.0004, 0.00001, 0.0002) * 0.6 + pore.yzw * 0.000014;
+    float air = smoothstep(peel - px, peel + px, depth) * step(0.0001, gap);
+    pithCol = mix(pithCol, pithCol * vec3(0.78, 0.68, 0.48), air);
     vec3 peelCol = mix(pithCol, flavCol, flav);
     albedo = mix(albedo, peelCol, pithK);
     rough = mix(rough, mix(mix(0.62, 0.45, smoothstep(peel - 0.0012, peel, depth)), mix(0.38, 0.1, glandK), flav), pithK);
     clear = mix(clear, mix(0.2, 0.7 * glandK, flav), pithK);
     ccRough = mix(ccRough, 0.08, pithK);
     gN = mix(gN, pg * (1.0 - flav), pithK);
-    cavity = mix(cavity, 1.0 - 0.25 * glandK * flav, pithK);
+    cavity = mix(cavity, (1.0 - 0.25 * glandK * flav) * (1.0 - 0.5 * air), pithK);
   }
   float whiteK = max(pithK * (1.0 - flav), max(coreK, memK * thick));
   profile = whiteK > 0.5 ? 2.0 : profile;
