@@ -2,6 +2,10 @@
 
 The realism bar is `/tmp/apelsin-work/refs/ivan-reference-wedges.jpg` (when present), and the numbers come from `/tmp/apelsin-work/research/REALISM.md`.
 
+## Scope
+
+One navel orange on one white studio cove. Interactions: knife, hand, orbit/zoom, presets Whole / Halves / Wedges / Reference, New orange, Screenshot, Sound. Varieties, the kitchen and dark scenes, squeeze, slow motion, the macro toggle and the Wheels preset were removed on purpose; do not bring them back.
+
 ## Conventions
 
 - Buildless ES modules served as static files. No bundler, no TypeScript, no runtime CDN. The only runtime dependency is `vendor/rapier/rapier.mjs`.
@@ -22,20 +26,20 @@ The realism bar is `/tmp/apelsin-work/refs/ivan-reference-wedges.jpg` (when pres
 | `src/shadows.js` | key-light shadow map + back depth, ground height map → ground AO, bent normal and area-light key visibility (cached while nothing moves) |
 | `src/post.js` + `src/shaders/post.js` | SSAO, SSS, combine/background, DOF + autofocus, TAA, bloom, tonemap |
 | `src/shaders/common.js` | Frame UBO, noise/Voronoi, `Surface`, `shadeSurface()` (shared lighting) |
-| `src/shaders/materials.js` | uber VS/FS builder, backdrop materials (cove, board, counter, slate), wetness |
-| `src/orange/params.js` | variety table, seeded params, `packOrange()` → Orange UBO |
+| `src/shaders/materials.js` | uber VS/FS builder, the cove backdrop material, wetness |
+| `src/orange/params.js` | seeded navel-orange params, `packOrange()` → Orange UBO |
 | `src/orange/mesh.js` | `shapeRadius` (JS twin of GLSL `orangeShapeRadius`), base mesh, mesh analysis, hull points, raycast |
 | `src/orange/slice.js` | plane split of a triangle soup into two closed pieces with convex caps |
 | `src/orange/piece.js` | piece object, model matrices, rest/world conversions, picking |
 | `src/orange/glsl.js` | Orange UBO, shape, rind surface, interior (cut-face) surface |
 | `src/world.js` | piece list, new orange, `cut()`, physics sync, bounds |
 | `src/physics.js` | Rapier world, sphere-compound piece bodies (hidden hull for mass), rolling resistance, rest holding, grab spring, impact events, `settle()` |
-| `src/tools.js` | knife / hand / squeeze / camera input and the blade-trail overlay |
+| `src/tools.js` | knife / hand / camera input and the blade-trail overlay |
 | `src/knife.js` | chef's knife mesh and its pose/animation along the stroke (drawable with material `steel`) |
 | `src/presets.js` | scripted cuts and compositions, settled with `app.settle()` |
-| `src/juice.js` | droplets, mist, pendant drips, squeeze jets, droplet rendering, wetness splats and pooling |
-| `src/scenes.js` | Studio / Kitchen / Dark: env lights, backdrop meshes, colliders, camera, grade |
-| `src/audio.js`, `src/ui.js` | synthesised sounds; toolbar, hint, keyboard |
+| `src/juice.js` | droplets, mist, pendant drips, droplet rendering, wetness splats and pooling |
+| `src/scenes.js` | `STUDIO`: env lights, cove backdrop mesh, colliders, camera, grade |
+| `src/audio.js`, `src/ui.js` | synthesised sounds; toolbar (tools, presets, new orange, sound, screenshot), hint, keyboard |
 
 ## Contracts
 
@@ -50,9 +54,9 @@ The realism bar is `/tmp/apelsin-work/refs/ivan-reference-wedges.jpg` (when pres
 - **Scene fields** (render): `occluder { bounce, leak, mfp, bounceWhite }`, `grade { tonemap, white, contrast, saturation, balance, pathToWhite, toe, vignette, grain, bloom, bloomThreshold }`, `pool [radius, strength]`, `dof` (f-stop for always-on depth of field on high+), `groundReach`. `frame.focusPoint` (world point) and `frame.fStop` are optional; without a focus point the renderer auto-focuses on the piece nearest the screen centre.
 - **Materials**: `MATERIALS` in `shaders/materials.js` maps a name to GLSL. Drawables carry `material`, which selects the compiled program. Adding a material means one GLSL entry plus a scene backdrop or a drawable that uses it.
 - **Render pass**: insert `{ name, enabled(ctx), run(ctx) }` into `renderer.passes` at the right position. Read `ctx.targets` (depth, normal, velocity, diffuse, specular, albedo, hdr, hdrCopy) and the current `ctx.color`, and set `ctx.color` to your output. Allocate size-dependent targets in a `resize` (see `post.js`). Never sample a texture that is attached to the bound FBO.
-- **Pieces**: `{ id, geometry: { data, count }, com, volume, radius, caps[], gpu, position, rotation, model, prevModel, body, squash }`. Vertex layout is `STRIDE = 7`: position, normal, cap flag (non-indexed triangles). Caps hold `id`, `normal`, `d`, `area`, `centroid`, `tris`. The cap flag in the vertex data is the cap id (> 0.5); `geometry.planes[id]` is the cap's outward plane and `geometry.params` the orange params. `geometry` keeps caps flat (slicing, hulls, raycasts, juice use it); only the GPU copy is displaced by `orange/relief.js displaceCaps`.
+- **Pieces**: `{ id, geometry: { data, count }, com, volume, radius, caps[], gpu, position, rotation, model, prevModel, body }`. Vertex layout is `STRIDE = 7`: position, normal, cap flag (non-indexed triangles). Caps hold `id`, `normal`, `d`, `area`, `centroid`, `tris`. The cap flag in the vertex data is the cap id (> 0.5); `geometry.planes[id]` is the cap's outward plane and `geometry.params` the orange params. `geometry` keeps caps flat (slicing, hulls, raycasts, juice use it); only the GPU copy is displaced by `orange/relief.js displaceCaps`.
 - **Physics**: never give pieces convex-hull contacts; polyhedron contacts in the vendored Rapier creep and tunnel. Contacts are balls (`contactBalls`), statics are cuboids. Collision groups: statics collide with all balls, a coverage subset of each piece's balls (`GROUP_TOUCH`) also collides between pieces. Never call `body.sleep()` by hand (woken bodies then fall through statics): resting pieces are `held` (velocities zeroed each step) and Rapier sleeps them itself. Piece fields owned by physics: `body`, `held`, `contact` (`'ground' | 'piece' | null`), `rolling`, `restTime`, `freshUntil`.
-- **Juice**: `cutBurst(piece, cap, params, amount)`, `fresh(piece, cap, seconds)` (drips from the lowest edge), `squeeze(piece, cap, params, dt, hold, state)`, `setVariety(name)` → floor tint. The wetness map is RG16F: R = water (dries in ~50 s), G = deposit (stays). Backdrop materials read it in `applyWetness` and take `uniform vec3 uJuiceTint`, set by `main.js applyJuiceTint` on the backdrop programs.
+- **Juice**: `cutBurst(piece, cap, params, amount)`, `fresh(piece, cap, seconds)` (drips from the lowest edge), `tint` (floor stain tint). The wetness map is RG16F: R = water (dries in ~50 s), G = deposit (stays). The cove material reads it in `applyWetness` and takes `uniform vec3 uJuiceTint`, set once by `main.js` on the cove program.
 - **Materials**: `steel` (knife): `cap` attribute 1 = wooden handle, 0 = steel; shading uses rest (local knife) coordinates.
-- **Test API additions**: `poses()`, `project(point)`, `contacts()` (`floor` = lowest piece point above the floor, `overlap` = deepest hull point inside another piece), `wetness()` (stain area, m²), `toggle(name)`; `info()` adds `knife, splats, drips, slowmo, macro, squash, muted`.
+- **Test API additions**: `poses()`, `project(point)`, `contacts()` (`floor` = lowest piece point above the floor, `overlap` = deepest hull point inside another piece), `wetness()` (stain area, m²); `info()` adds `knife, splats, drips, muted`. Keys: K/H tools, 1–4 presets, N new orange, R reset, A sound, P screenshot.
 - **Test mode** (`?test`): `rAF` does not advance anything; `apelsin.step(n)` runs n fixed 1/60 s frames; the camera snaps. `?debug` adds `apelsin.internals`.
