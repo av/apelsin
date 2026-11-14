@@ -50,13 +50,24 @@ float coarse(vec3 p, float lift) {
   }
   return d;
 }
+float ridgeLift(vec3 p, int i) {
+  float m = 1.0;
+  for (int j = 0; j < ${MAX_PLANES}; j++) {
+    if (j >= uPlaneCount) break;
+    if (j != i) m = min(m, uPlanes[j].w - dot(uPlanes[j].xyz, p));
+  }
+  float k = 1.0 - smoothstep(0.0, 0.0012, max(m, 0.0));
+  if (k <= 0.0) return 0.0;
+  return gPx > 0.00015 ? k * 0.00012 : k * 0.00025 * vnoise(p * 1500.0 + oNoise.zxy);
+}
+float reliefH(vec3 p, int i) { return cutHeight(p, uPlanes[i]) + ridgeLift(p, i); }
 float fine(vec3 p, out int which) {
   float d = envelope(p);
   which = -1;
   for (int i = 0; i < ${MAX_PLANES}; i++) {
     if (i >= uPlaneCount) break;
     float s = dot(uPlanes[i].xyz, p) - uPlanes[i].w;
-    float f = s > H_MIN ? s - cutHeight(p, uPlanes[i]) : s - H_MIN;
+    float f = s > H_MIN ? s - reliefH(p, i) : s - H_MIN;
     if (f > d) { d = f; which = i; }
   }
   return d;
@@ -108,7 +119,7 @@ bool refine(vec3 ro, vec3 rd, inout float t, out int which, int steps) {
     if (dn > 0.2) {
       float s0 = dot(pl.xyz, ro) - pl.w;
       float tt = s0 / dn;
-      int iters = tierSteps(2, 2, 3, 3);
+      int iters = tierSteps(2, 2, 2, 2);
       for (int k = 0; k < 4; k++) {
         if (k >= iters) break;
         tt = (s0 - cutHeight(ro + rd * tt, pl)) / dn;
@@ -164,8 +175,8 @@ vec3 reliefNormal(vec3 p, int which, float e, float h0) {
   vec3 n = pl.xyz;
   vec3 t1 = normalize(abs(n.y) < 0.9 ? cross(n, vec3(0, 1, 0)) : cross(n, vec3(1, 0, 0)));
   vec3 t2 = cross(n, t1);
-  float h1 = cutHeight(p + t1 * e, pl);
-  float h2 = cutHeight(p + t2 * e, pl);
+  float h1 = reliefH(p + t1 * e, which);
+  float h2 = reliefH(p + t2 * e, which);
   return normalize(n - t1 * (h1 - h0) / e - t2 * (h2 - h0) / e);
 }
 `;
@@ -196,11 +207,12 @@ void main() {
   float tMax = tExit(ro, rd);
   vec3 cam = (uInvModel * vec4(uCamPos.xyz, 1.0)).xyz;
   float k = pixelScale();
-  float eps = max(distance(cam, ro) * k * 0.35, 0.000004);
+  gPx = distance(cam, ro) * k;
+  float eps = max(gPx * 0.35, 0.000004);
   float t;
   if (!marchCoarse(ro, rd, tMax, eps, tierSteps(24, 32, 40, 48), H_MAX, t)) discard;
   int which;
-  if (!refine(ro, rd, t, which, tierSteps(4, 4, 5, 6))) discard;
+  if (!refine(ro, rd, t, which, tierSteps(4, 4, 4, 5))) discard;
   vec3 p = ro + rd * t;
   vec3 Nr = which < 0 ? envelopeNormal(p) : uPlanes[which].xyz;
   vec4 w = uModel * vec4(p, 1.0);
@@ -238,7 +250,7 @@ void main() {
     Anat A = anatomy(q);
     Sac S = noSac();
     if (fleshy(A)) S = sacsAt(A);
-    float h = heightAt(A, S, q, uPlanes[i]);
+    float h = heightAt(A, S, q, uPlanes[i]) + ridgeLift(p, i);
     if (s - h > best) { best = s - h; which = i; hw = h; Aw = A; Sw = S; }
   }
   vec3 Nr = which < 0 ? envelopeNormal(p) : uPlanes[which].xyz;
@@ -251,6 +263,7 @@ void main() {
   si.cap = which < 0 ? 0.0 : 1.0;
   si.restToWorld = mat3(uModel);
   si.pixel = distance(uCamPos.xyz, world) * pixelScale();
+  gPx = si.pixel;
   Surface s;
   if (which < 0) s = rindSurface(si);
   else s = cutSurface(si, uPlanes[which], reliefNormal(p, which, max(si.pixel * 0.7, 0.00003), hw), Aw, Sw);
