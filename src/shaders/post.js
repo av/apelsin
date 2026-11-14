@@ -320,6 +320,9 @@ uniform float uSaturation;
 uniform vec3 uBalance;
 uniform float uPathToWhite;
 uniform float uToe;
+uniform float uChannel;
+uniform sampler2D uAuto;
+uniform float uAutoDecode;
 in vec2 vUv;
 out vec4 outColor;
 const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
@@ -333,6 +336,9 @@ vec3 photo(vec3 c) {
   float W = uWhite, s = 2.0 - W;
   float fm = m <= s ? m : m >= W ? 1.0 : s + (1.0 - s) * (1.0 - pow(1.0 - (m - s) / (W - s), 2.0));
   vec3 o = c * (fm / m);
+  vec3 k = clamp((c - s) / (W - s), 0.0, 1.0);
+  vec3 pc = mix(c, s + (1.0 - s) * (1.0 - (1.0 - k) * (1.0 - k)), step(vec3(s), c));
+  o = mix(o, min(pc, vec3(1.0)), uChannel);
   float over = clamp((m - W) / (W * uPathToWhite), 0.0, 1.0);
   o = mix(o, vec3(1.0), over * over * (3.0 - 2.0 * over));
   float l = dot(o, LUMA);
@@ -360,7 +366,7 @@ void main() {
     c = clamp(mix(c, sharp, 1.0 / (1.0 + dot(c, vec3(0.3)))), lo, hi);
   }
   c += texture(uBloom, vUv).rgb * uBloomStrength;
-  c *= uExposure * uBalance;
+  c *= uExposure * uBalance * texture(uAuto, vec2(0.5)).r * uAutoDecode;
   c = uMode > 0.5 ? agx(c) : photo(c);
   vec2 q = vUv - 0.5;
   q.x *= uResolution.x / uResolution.y;
@@ -370,6 +376,43 @@ void main() {
   float lum = dot(c, LUMA);
   c += n * (uGrain * 4.0 * lum * (1.0 - lum) + 0.75 / 255.0);
   outColor = vec4(c, 1.0);
+}`;
+
+export const METER_FS = `
+uniform sampler2D uColor;
+uniform sampler2D uAlbedo;
+uniform float uExposure;
+uniform vec2 uGrid;
+in vec2 vUv;
+out vec4 outColor;
+void main() {
+  float sw = 0.0, sl = 0.0;
+  for (int j = 0; j < 4; j++) for (int i = 0; i < 4; i++) {
+    vec2 uv = vUv + (vec2(float(i), float(j)) - 1.5) * 0.25 * uGrid;
+    vec3 a = texture(uAlbedo, uv).rgb;
+    vec3 c = texture(uColor, uv).rgb * uExposure;
+    float w = smoothstep(0.3, 0.6, max(a.r, max(a.g, a.b)) - min(a.r, min(a.g, a.b))) * (1.0 - 0.6 * length(uv - 0.5));
+    sw += w;
+    sl += w * clamp((log2(max(max(c.r, max(c.g, c.b)), 1e-4)) + 8.0) / 12.0, 0.0, 1.0);
+  }
+  outColor = vec4(sl / 16.0, sw / 16.0, 0.0, 1.0);
+}`;
+
+export const ADAPT_FS = `
+uniform sampler2D uMeter;
+uniform sampler2D uPrev;
+uniform float uLevel;
+uniform vec4 uAutoParams;
+uniform float uBlend;
+uniform float uDecode;
+in vec2 vUv;
+out vec4 outColor;
+void main() {
+  vec2 m = textureLod(uMeter, vec2(0.5), uLevel).rg;
+  float f = 1.0;
+  if (m.g > uAutoParams.w) f = clamp(exp2(uAutoParams.x - (m.r / m.g * 12.0 - 8.0)), uAutoParams.y, uAutoParams.z);
+  float prev = texture(uPrev, vec2(0.5)).r * uDecode;
+  outColor = vec4(mix(prev, f, uBlend) / uDecode, 0.0, 0.0, 1.0);
 }`;
 
 export const COPY_FS = `

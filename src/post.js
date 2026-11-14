@@ -1,5 +1,5 @@
 import { program, use, set, FULLSCREEN_VS, fullscreen, fbo, target, formats, bind, destroy } from './gl.js';
-import { SSAO_FS, BLUR_FS, SSS_FS, COMBINE_FS, TAA_FS, FOCUS_FS, DOF_FS, DOWN_FS, UP_FS, TONEMAP_FS, COPY_FS } from './shaders/post.js';
+import { SSAO_FS, BLUR_FS, SSS_FS, COMBINE_FS, TAA_FS, FOCUS_FS, DOF_FS, DOWN_FS, UP_FS, TONEMAP_FS, COPY_FS, METER_FS, ADAPT_FS } from './shaders/post.js';
 import { mat4 } from './math.js';
 
 const BLOOM_LEVELS = 5;
@@ -18,7 +18,7 @@ export function createPost(gl) {
   const progs = {
     ssao: p(SSAO_FS, 'ssao'), blur: p(BLUR_FS, 'ssao-blur'), sss: p(SSS_FS, 'sss'), combine: p(COMBINE_FS, 'combine'),
     taa: p(TAA_FS, 'taa'), focus: p(FOCUS_FS, 'focus'), dof: p(DOF_FS, 'dof'), down: p(DOWN_FS, 'bloom-down'), up: p(UP_FS, 'bloom-up'),
-    tonemap: p(TONEMAP_FS, 'tonemap'), copy: p(COPY_FS, 'copy'),
+    tonemap: p(TONEMAP_FS, 'tonemap'), copy: p(COPY_FS, 'copy'), meter: p(METER_FS, 'ae-meter'), adapt: p(ADAPT_FS, 'ae-adapt'),
   };
   let t = {};
   let historyIndex = 0;
@@ -27,6 +27,27 @@ export function createPost(gl) {
   let focusValid = false;
   let seed = 0;
   const focusTargets = [0, 1].map(() => fbo(gl, [target(gl, 1, 1, fmt.hdr, { filter: gl.NEAREST })]));
+  const aeDecode = gl.caps.floatTargets ? 1 : 4;
+  const meter = fbo(gl, [target(gl, 32, 32, fmt.hdr, { mips: true })]);
+  const aeTargets = [0, 1].map(() => fbo(gl, [target(gl, 1, 1, fmt.hdr, { filter: gl.NEAREST })]));
+  let aeIndex = 0, aeValid = false;
+  function autoExposure(ctx) {
+    const a = ctx.grade.auto;
+    if (!a) return null;
+    bind(gl, meter);
+    use(progs.meter, { uColor: ctx.color, uAlbedo: ctx.targets.albedo, uExposure: ctx.exposure, uGrid: [1 / 32, 1 / 32] });
+    fullscreen(gl);
+    gl.bindTexture(gl.TEXTURE_2D, meter.colors[0].tex);
+    gl.generateMipmap(gl.TEXTURE_2D);
+    const prev = aeTargets[aeIndex], next = aeTargets[1 - aeIndex];
+    bind(gl, next);
+    const blend = aeValid && !ctx.resetHistory ? 1 - Math.exp(-(ctx.frame.dt || 1 / 60) / (a.tau ?? 0.6)) : 1;
+    use(progs.adapt, { uMeter: meter.colors[0], uPrev: prev.colors[0], uLevel: 5, uAutoParams: [Math.log2(a.target), a.min, a.max, 0.01], uBlend: blend, uDecode: aeDecode });
+    fullscreen(gl);
+    aeIndex = 1 - aeIndex;
+    aeValid = true;
+    return next.colors[0];
+  }
 
   function resize(w, h, depth) {
     for (const v of Object.values(t)) Array.isArray(v) ? v.forEach((x) => destroy(gl, x, x.colors?.[0])) : v?.fb && destroy(gl, v, v.colors?.[0]);
@@ -134,13 +155,14 @@ export function createPost(gl) {
   }
 
   function tonemap(ctx, out = null) {
+    const auto = autoExposure(ctx);
     if (out) bind(gl, out); else bind(gl, null);
     const g = ctx.grade;
     use(progs.tonemap, {
       uColor: ctx.color, uBloom: ctx.bloom || ctx.black, uExposure: ctx.exposure, uBloomStrength: ctx.bloom ? g.bloom : 0,
       uSharpen: ctx.tier.taa ? ctx.tier.sharpen ?? 0.2 : 0, uMode: ctx.tonemapMode === 'agx' ? 1 : 0, uVignette: g.vignette, uGrain: g.grain * (ctx.tier.grainScale ?? 1),
       uSourceTexel: [1 / ctx.width, 1 / ctx.height], uWhite: g.white, uContrast: g.contrast, uSaturation: g.saturation, uBalance: g.balance,
-      uPathToWhite: g.pathToWhite, uToe: g.toe,
+      uPathToWhite: g.pathToWhite, uToe: g.toe, uChannel: g.channel ?? 0, uAuto: auto || ctx.white, uAutoDecode: auto ? aeDecode : 1,
     });
     fullscreen(gl);
   }
