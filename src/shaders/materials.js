@@ -199,7 +199,7 @@ Surface materialSurface(SurfaceInput si) {
   s.N = perturb(s.N, si.restToWorld * vec3(0.0, (brush - 0.5) * 0.05, 0.0), 1.0 - bevel);
   vec3 R = reflect(-si.V, s.N);
   float flag = smoothstep(0.02, 0.3, abs(R.y - 0.1)) * (0.85 + 0.15 * smoothstep(-0.6, 0.2, R.x));
-  s.f0 *= mix(0.22, 1.0, flag) * (0.9 + 0.2 * brush);
+  s.f0 *= mix(0.42, 1.0, flag) * (0.9 + 0.2 * brush);
   return s;
 }
 `;

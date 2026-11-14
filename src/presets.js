@@ -56,7 +56,7 @@ const LAYOUTS = {
     const yaw = app.scene.camera.yaw;
     const { right, toCamera } = cameraFrame(yaw);
     const pieces = app.world.pieces.slice().sort((a, b) => Math.atan2(a.com[2], a.com[0]) - Math.atan2(b.com[2], b.com[0]));
-    const slots = [[-1, -1], [0, -1], [1, -1], [-0.5, 0], [0.5, 0], [1.5, 0], [-1, 1], [0, 1]];
+    const slots = [[-1, -1], [0, -1], [1, -1], [-1.5, 0], [-0.5, 0], [0.5, 0], [-1, 1], [0, 1]];
     pieces.forEach((p, i) => {
       const [col, row] = slots[i];
       const big = p.caps.slice().sort((a, b) => b.area - a.area);
@@ -65,12 +65,12 @@ const LAYOUTS = {
       const up = quat.rotate(down, show.normal);
       const face = quat.rotate(quat.axisAngle([0, 1, 0], ((i * 37) % 11 - 5) * 3 * deg), toCamera);
       const rot = quat.mul(quat.fromTo([up[0], 0, up[2]], face), down);
-      const at = v3.add(v3.scale(right, (col - 0.25) * 0.095 + ((i * 53) % 7 - 3) * 0.002), v3.scale(toCamera, row * 0.064));
+      const at = v3.add(v3.scale(right, (col + 0.18) * 0.09 + ((i * 53) % 7 - 3) * 0.002), v3.scale(toCamera, row * 0.064));
       app.world.place(p, onPlane(app.world, at[0], at[2]), rot, { drop: 0.0015 });
     });
     app.settle();
     dripFromCaps(app, app.world.pieces, 6);
-    frame(app, { pitch: 0.62, distance: 0.5, height: 0.004 });
+    frame(app, { pitch: 0.62, distance: 0.6, height: 0.004 });
   },
 
   wheels(app) {

@@ -29,10 +29,11 @@ The realism bar is `/tmp/apelsin-work/refs/ivan-reference-wedges.jpg` (when pres
 | `src/orange/piece.js` | piece object, model matrices, rest/world conversions, picking |
 | `src/orange/glsl.js` | Orange UBO, shape, rind surface, interior (cut-face) surface |
 | `src/world.js` | piece list, new orange, `cut()`, physics sync, bounds |
-| `src/physics.js` | Rapier world, convex-hull bodies, grab spring, impact events |
+| `src/physics.js` | Rapier world, sphere-compound piece bodies (hidden hull for mass), rolling resistance, rest holding, grab spring, impact events, `settle()` |
 | `src/tools.js` | knife / hand / squeeze / camera input and the blade-trail overlay |
-| `src/presets.js` | scripted cuts and compositions |
-| `src/juice.js` | droplet particles, droplet rendering, wetness splats |
+| `src/knife.js` | chef's knife mesh and its pose/animation along the stroke (drawable with material `steel`) |
+| `src/presets.js` | scripted cuts and compositions, settled with `app.settle()` |
+| `src/juice.js` | droplets, mist, pendant drips, squeeze jets, droplet rendering, wetness splats and pooling |
 | `src/scenes.js` | Studio / Kitchen / Dark: env lights, backdrop meshes, colliders, camera, grade |
 | `src/audio.js`, `src/ui.js` | synthesised sounds; toolbar, hint, keyboard |
 
@@ -45,4 +46,8 @@ The realism bar is `/tmp/apelsin-work/refs/ivan-reference-wedges.jpg` (when pres
 - **Materials**: `MATERIALS` in `shaders/materials.js` maps a name to GLSL. Drawables carry `material`, which selects the compiled program. Adding a material means one GLSL entry plus a scene backdrop or a drawable that uses it.
 - **Render pass**: insert `{ name, enabled(ctx), run(ctx) }` into `renderer.passes` at the right position. Read `ctx.targets` (depth, normal, velocity, diffuse, specular, hdr, hdrCopy) and the current `ctx.color`, and set `ctx.color` to your output. Allocate size-dependent targets in a `resize` (see `post.js`). Never sample a texture that is attached to the bound FBO.
 - **Pieces**: `{ id, geometry: { data, count }, com, volume, radius, caps[], gpu, position, rotation, model, prevModel, body, squash }`. Vertex layout is `STRIDE = 7`: position, normal, cap flag (non-indexed triangles). Caps hold `normal`, `d`, `area`, `centroid`, `tris`.
+- **Physics**: never give pieces convex-hull contacts; polyhedron contacts in the vendored Rapier creep and tunnel. Contacts are balls (`contactBalls`), statics are cuboids. Collision groups: statics collide with all balls, a coverage subset of each piece's balls (`GROUP_TOUCH`) also collides between pieces. Never call `body.sleep()` by hand (woken bodies then fall through statics): resting pieces are `held` (velocities zeroed each step) and Rapier sleeps them itself. Piece fields owned by physics: `body`, `held`, `contact` (`'ground' | 'piece' | null`), `rolling`, `restTime`, `freshUntil`.
+- **Juice**: `cutBurst(piece, cap, params, amount)`, `fresh(piece, cap, seconds)` (drips from the lowest edge), `squeeze(piece, cap, params, dt, hold, state)`, `setVariety(name)` → floor tint. The wetness map is RG16F: R = water (dries in ~50 s), G = deposit (stays). Backdrop materials read it in `applyWetness` and take `uniform vec3 uJuiceTint`, set by `main.js applyJuiceTint` on the backdrop programs.
+- **Materials**: `steel` (knife): `cap` attribute 1 = wooden handle, 0 = steel; shading uses rest (local knife) coordinates.
+- **Test API additions**: `poses()`, `project(point)`, `contacts()` (`floor` = lowest piece point above the floor, `overlap` = deepest hull point inside another piece), `wetness()` (stain area, m²), `toggle(name)`; `info()` adds `knife, splats, drips, slowmo, macro, squash, muted`.
 - **Test mode** (`?test`): `rAF` does not advance anything; `apelsin.step(n)` runs n fixed 1/60 s frames; the camera snaps. `?debug` adds `apelsin.internals`.
