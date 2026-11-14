@@ -400,6 +400,86 @@ test('a cut face is a field of separate wet sac highlights, not a flat painted c
   await page.close();
 });
 
+test('ray-marched pieces match their real meshes from any orbit angle: no holes, no strays', async () => {
+  const page = await open('seed=4&preset=wedges&debug', { width: 1280, height: 800 });
+  const base = await page.evaluate(() => window.apelsin.camera({}).yaw);
+  for (const [dy, pitch] of [[0, 0.5], [0.6, 0.5], [-0.9, 0.3], [2.2, 0.2], [3.4, 0.9]]) {
+    await page.evaluate(([y, p]) => window.apelsin.camera({ yaw: y, pitch: p }), [base + dy, pitch]);
+    const result = await page.evaluate(() => {
+      window.apelsin.step(4);
+      const { renderer, gl, world, camera } = window.apelsin.internals;
+      const W = renderer.width, H = renderer.height;
+      const read = (fb) => { gl.bindFramebuffer(gl.FRAMEBUFFER, fb); const px = new Uint8Array(W * H * 4); gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, px); return px; };
+      const src = gl.createFramebuffer();
+      gl.bindFramebuffer(gl.FRAMEBUFFER, src);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, renderer.targets.normal.tex, 0);
+      const marched = read(src);
+      gl.deleteFramebuffer(src);
+      const sh = (t, code) => { const x = gl.createShader(t); gl.shaderSource(x, code); gl.compileShader(x); return x; };
+      const prog = gl.createProgram();
+      gl.attachShader(prog, sh(gl.VERTEX_SHADER, '#version 300 es\nlayout(location=0) in vec3 aPos;\nuniform mat4 uM;\nvoid main(){ gl_Position = uM * vec4(aPos, 1.0); }'));
+      gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, '#version 300 es\nprecision highp float;\nuniform float uId;\nout vec4 o;\nvoid main(){ o = vec4(0.0, 0.0, 0.0, uId / 255.0); }'));
+      gl.linkProgram(prog);
+      const tex = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, W, H);
+      const depth = gl.createRenderbuffer();
+      gl.bindRenderbuffer(gl.RENDERBUFFER, depth);
+      gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT24, W, H);
+      const fb = gl.createFramebuffer();
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+      gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depth);
+      gl.drawBuffers([gl.COLOR_ATTACHMENT0]);
+      gl.viewport(0, 0, W, H);
+      gl.clearColor(0, 0, 0, 0);
+      gl.clearDepth(1);
+      gl.enable(gl.DEPTH_TEST);
+      gl.depthFunc(gl.LESS);
+      gl.depthMask(true);
+      gl.disable(gl.CULL_FACE);
+      gl.disable(gl.BLEND);
+      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+      gl.useProgram(prog);
+      const vao = gl.createVertexArray();
+      gl.bindVertexArray(vao);
+      const buf = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+      world.pieces.forEach((piece, k) => {
+        const m = new Float32Array(16), a = camera.viewProj, b = piece.model;
+        for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++) m[c * 4 + r] = a[r] * b[c * 4] + a[4 + r] * b[c * 4 + 1] + a[8 + r] * b[c * 4 + 2] + a[12 + r] * b[c * 4 + 3];
+        gl.uniformMatrix4fv(gl.getUniformLocation(prog, 'uM'), false, m);
+        gl.uniform1f(gl.getUniformLocation(prog, 'uId'), k + 1);
+        gl.bufferData(gl.ARRAY_BUFFER, piece.geometry.data, gl.STREAM_DRAW);
+        gl.enableVertexAttribArray(0);
+        gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 28, 0);
+        gl.drawArrays(gl.TRIANGLES, 0, piece.geometry.count);
+      });
+      const mesh = read(fb);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      [fb].forEach((x) => gl.deleteFramebuffer(x));
+      gl.deleteTexture(tex); gl.deleteRenderbuffer(depth); gl.deleteBuffer(buf); gl.deleteVertexArray(vao); gl.deleteProgram(prog);
+      const n = world.pieces.length;
+      const idAt = (px, x, y) => { const v = px[(y * W + x) * 4 + 3]; return v >= 1 && v <= n ? v : 0; };
+      const R = 5;
+      const uniform = (px, x, y, id) => { for (let dy = -R; dy <= R; dy++) for (let dx = -R; dx <= R; dx++) { const xx = x + dx, yy = y + dy; if (xx < 0 || yy < 0 || xx >= W || yy >= H || idAt(px, xx, yy) !== id) return false; } return true; };
+      let holes = 0, strays = 0, drawn = 0;
+      for (let y = R; y < H - R; y += 2) for (let x = R; x < W - R; x += 2) {
+        const want = idAt(mesh, x, y), got = idAt(marched, x, y);
+        if (got) drawn++;
+        if (want === got) continue;
+        if (want && uniform(mesh, x, y, want)) holes++;
+        if (got && uniform(mesh, x, y, want)) strays++;
+      }
+      return { holes, strays, drawn };
+    });
+    assert.ok(result.drawn > 5000, `pieces are on screen at yaw offset ${dy}: ${JSON.stringify(result)}`);
+    assert.ok(result.holes <= 3 && result.strays <= 3, `marched pieces match the meshes at yaw offset ${dy}: ${JSON.stringify(result)}`);
+  }
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
+
 test('the cut face renders solid from every viewing angle, with no holes', async () => {
   const page = await open('seed=5&preset=halves&debug', { width: 900, height: 900 });
   const { side } = await faceUpHalf(page);
