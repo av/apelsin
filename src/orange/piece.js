@@ -8,7 +8,7 @@ let nextId = 1;
 
 export function createPiece(gl, geometry, pose = {}) {
   const info = analyseMesh(geometry);
-  const planes = piecePlanes(geometry);
+  const planes = piecePlanes(geometry, info.caps);
   const proxy = pieceProxy(geometry.support, planes);
   const planeData = new Float32Array(MAX_PLANES * 4);
   planes.forEach((q, i) => planeData.set(q, i * 4));

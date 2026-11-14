@@ -1,10 +1,11 @@
 import { v3 } from '../math.js';
-import { STRIDE } from './mesh.js';
+import { STRIDE, shapeRadius } from './mesh.js';
 
 export const MAX_PLANES = 12;
 export const RELIEF_MARGIN = 0.0014;
 const INFLATE = 0.0005;
 const DIRECTIONS = 96;
+const SLIVER_AREA = 2e-5;
 
 const DIRS = (() => {
   const out = [], g = Math.PI * (3 - Math.sqrt(5));
@@ -39,27 +40,26 @@ function hull2(points) {
 }
 
 function clip(faces, plane) {
-  const n = plane, d = plane[3], out = [], cut = [];
+  const n = plane, d = plane[3], eps = 1e-9, out = [];
   for (const f of faces) {
     const res = [];
     for (let i = 0; i < f.length; i++) {
       const a = f[i], b = f[(i + 1) % f.length];
       const da = v3.dot(n, a) - d, db = v3.dot(n, b) - d;
-      if (da <= 0) res.push(a);
-      if (Math.abs(da) < 1e-9) cut.push(a);
-      if ((da < -1e-9 && db > 1e-9) || (da > 1e-9 && db < -1e-9)) {
-        const p = v3.lerp(a, b, da / (da - db));
-        res.push(p);
-        cut.push(p);
-      }
+      if (da <= eps) res.push(a);
+      if ((da < -eps && db > eps) || (da > eps && db < -eps)) res.push(v3.lerp(a, b, da / (da - db)));
     }
     if (res.length >= 3) out.push(res);
   }
-  if (cut.length >= 3) {
+  const on = [];
+  for (const f of out) for (const p of f) if (Math.abs(v3.dot(n, p) - d) < 1e-7) on.push(p);
+  if (on.length >= 3) {
     const nn = [n[0], n[1], n[2]];
     const u = v3.norm(Math.abs(nn[1]) < 0.9 ? v3.cross([0, 1, 0], nn) : v3.cross([1, 0, 0], nn));
     const w = v3.cross(nn, u);
-    const h = hull2(cut.map((p) => [v3.dot(p, u), v3.dot(p, w), p]));
+    const seen = new Map();
+    for (const p of on) { const k = `${Math.round(v3.dot(p, u) * 1e7)},${Math.round(v3.dot(p, w) * 1e7)}`; if (!seen.has(k)) seen.set(k, [v3.dot(p, u), v3.dot(p, w), p]); }
+    const h = hull2([...seen.values()]);
     if (h.length >= 3) out.push(h.map((e) => e[2]));
   }
   return out;
@@ -110,11 +110,29 @@ export function insideProxy(proxy, p, margin = 0.002) {
   return true;
 }
 
-export function piecePlanes(geometry) {
+export function piecePlanes(geometry, caps = null) {
   const ids = new Set();
   const { data, count, planes } = geometry;
   for (let i = 0; i < count; i++) { const id = data[i * STRIDE + 6]; if (id > 0.5) ids.add(id); }
-  const out = [];
-  for (const id of ids) if (planes && planes[id]) out.push(planes[id]);
-  return out.slice(0, MAX_PLANES);
+  const area = new Map((caps || []).map((c) => [c.id, c.area]));
+  const all = [...ids].filter((id) => planes && planes[id]).sort((a, b) => (area.get(b) ?? 1) - (area.get(a) ?? 1));
+  const keep = all.filter((id) => (area.get(id) ?? 1) >= SLIVER_AREA);
+  const covered = (id) => {
+    if (!geometry.params) return false;
+    const q = planes[id];
+    const step = Math.max(1, Math.floor(count / 3000));
+    for (let i = 0; i < count; i += step) {
+      const k = i * STRIDE;
+      for (const off of [0.0005, 0.003]) {
+        const p = [data[k] + q[0] * off, data[k + 1] + q[1] * off, data[k + 2] + q[2] * off];
+        if (q[0] * p[0] + q[1] * p[1] + q[2] * p[2] - q[3] < 0.0002) continue;
+        if (keep.some((j) => { const r = planes[j]; return r[0] * p[0] + r[1] * p[1] + r[2] * p[2] - r[3] > 0; })) continue;
+        const rl = Math.hypot(p[0], p[1], p[2]);
+        if (rl < shapeRadius(geometry.params, [p[0] / rl, p[1] / rl, p[2] / rl])) return false;
+      }
+    }
+    return true;
+  };
+  for (const id of all) if (!keep.includes(id) && !covered(id)) keep.push(id);
+  return keep.slice(0, MAX_PLANES).map((id) => planes[id]);
 }
