@@ -415,6 +415,12 @@ Surface cutSurface(SurfaceInput si, vec4 plane, vec3 Nrest, Anat A, Sac sacIn) {
     vec3 gapCol = flesh * vec3(0.97, 0.9, 0.75);
     albedo = mix(flesh, gapCol, gap);
     albedo = mix(albedo, wallCol, wall * 0.12);
+    float farK = smoothstep(0.00008, 0.0003, px);
+    if (farK > 0.0) {
+      float inside = 1.0 - smoothstep(0.55, 1.0, s.e);
+      albedo = mix(albedo, albedo * vec3(0.82, 0.66, 0.45), (1.0 - inside) * farK * 0.55);
+      gN -= gradS * min(s.wx, s.wz) * 0.45 * farK * inside;
+    }
     vec3 eRho = normalize(vec3(p.x, 0.0, p.z) + vec3(1e-7, 0.0, 0.0));
     vec3 eAlong = normalize(-eRho - vec3(0.0, 0.22, 0.0));
     vec3 eUp = normalize(cross(eAlong, ePsi));
