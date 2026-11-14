@@ -24,6 +24,7 @@ The realism bar is `/tmp/apelsin-work/refs/ivan-reference-wedges.jpg` (when pres
 | `src/shaders/common.js` | Frame UBO, noise/Voronoi, `Surface`, `shadeSurface()` (shared lighting) |
 | `src/shaders/materials.js` | uber VS/FS builder, backdrop materials (cove, board, counter, slate), wetness |
 | `src/orange/params.js` | variety table, seeded params, `packOrange()` → Orange UBO |
+| `src/orange/shape.js` | `createShape(seed, opts)`: the irregular fruit shape (radii per rest direction), the shape cubemap bake, the oil-gland point list; `SHAPE_GLSL` (`uShape`, `shapeAt`) |
 | `src/orange/mesh.js` | `shapeRadius` (JS twin of GLSL `orangeShapeRadius`), base mesh, mesh analysis, hull points, raycast |
 | `src/orange/slice.js` | plane split of a triangle soup into two closed pieces with convex caps |
 | `src/orange/piece.js` | piece object, model matrices, rest/world conversions, picking |
@@ -38,6 +39,10 @@ The realism bar is `/tmp/apelsin-work/refs/ivan-reference-wedges.jpg` (when pres
 | `src/audio.js`, `src/ui.js` | synthesised sounds; toolbar, hint, keyboard |
 
 ## Contracts
+
+- **Shape** (`src/orange/shape.js`, the single source of truth for where surfaces are): `createShape(seed, { a, c, flavedo, pith, navel, navelOpen, calyx })` returns `{ radius(d), pulpRadius(d), flavedo(d), peel(d), sample(d) → [outerR, pulpR, flavedoR, peel], axis, tilt, base, glands, glandShape, glandCount, bake(gl) }`. `d` is a unit rest-space direction; every value is in metres. `flavedo(d)` and `peel(d)` are thicknesses; `flavedoR = outerR − flavedo` is the flavedo/albedo boundary; `pulpR` is the albedo/pulp boundary. `base` is the rest direction of the flattened resting spot.
+  - `glands`: `Float32Array`, `GLAND_STRIDE = 5` per gland: x, y, z (the point on the outer surface above the gland), radius (tangential), depth (gland centre below the surface). `glandShape`: 2 per gland, ellipticity (≥ 1) and orientation angle (radians from the local east tangent `normalize(z, 0, −x)` toward north). The rind pits are stamped at exactly these points.
+  - `bake(gl)` (memoised per context) → `{ cube, texture, size }`: an RGBA16F 128² cube storing outerR, pulpR, flavedoR, spare (0) **minus `SHAPE_BIAS`** for precision. Never read the texels directly: GLSL uses `SHAPE_GLSL` (`uniform samplerCube uShape; vec4 shapeAt(vec3 restDir)`), which adds the bias back. `texture` is the `{ tex, cube: true }` form that `gl.js set()` binds.
 
 - **Uniform blocks**: `Frame` (binding 0, `src/shaders/common.js`; packed in `renderer.js fillFrame` with the offsets in `F`), `Orange` (binding 1, `src/orange/glsl.js`; packed by `packOrange`). If you add a field, update the GLSL block, the float count and the packer together.
   - `Orange` tail (orange): Orange ends with `oFleshDeep` (flesh colour next to the dorsal wall, w = core paleness, negative means more saturated toward the core), `oFleshWall` (vesicle wall colour), `oExtra` (wax coat weight, pebble amplitude in metres, navel opening in radians, hollow core fraction); `oRindStem.w` is the stem tint amount.
