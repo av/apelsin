@@ -4,7 +4,7 @@ export const GLAND_STRIDE = 5;
 export const SHAPE_SIZE = 128;
 export const SHAPE_BIAS = 0.035;
 const L_MAX = 8;
-const SIGMA = [0, 0, 0.0095, 0.0045, 0.0055, 0.003, 0.0022, 0.0016, 0.0012];
+const SIGMA = [0, 0, 0.0095, 0.0045, 0.0055, 0.0038, 0.0029, 0.0021, 0.0016];
 
 export const GLAND_SIZE = 512;
 export const RELIEF_SIZE = 256;
@@ -119,7 +119,7 @@ function glandPoints(shape, rnd) {
   }
   const base = n;
   for (let i = 0; i < base; i++) {
-    if (rnd() > 0.06) continue;
+    if (rnd() > 0.15) continue;
     const g = [px[i * 3], px[i * 3 + 1], px[i * 3 + 2]];
     const [t, b] = frame(g);
     const ang = rnd() * Math.PI * 2, r2 = pr[i] * (0.55 + 0.35 * rnd());
@@ -157,6 +157,11 @@ export function createShape(seed = 1, opts = {}) {
   const base = norm3([Math.sin(baseTilt) * Math.cos(baseAz), -Math.cos(baseTilt), Math.sin(baseTilt) * Math.sin(baseAz)]);
   const flatK = 0.012 + rnd() * 0.008;
   const flavedo = o.flavedo * (0.88 + 0.24 * rnd()), pith = o.pith * (0.88 + 0.24 * rnd());
+  const bumps = [];
+  for (let k = 0; k < 14; k++) {
+    const z = rnd() * 2 - 1, t = rnd() * Math.PI * 2, q = Math.sqrt(1 - z * z), w = 0.16 + rnd() * 0.2;
+    bumps.push([q * Math.cos(t), z, q * Math.sin(t), 2 / (w * w), (rnd() * 2 - 1) * (0.002 + rnd() * 0.004)]);
+  }
   const sepals = rnd() < 0.85 ? 5 : rnd() < 0.5 ? 4 : 6;
   const calyxR = o.calyx * (0.85 + 0.35 * rnd()), phase0 = rnd() * Math.PI * 2;
   const calyx = {
@@ -177,7 +182,12 @@ export function createShape(seed = 1, opts = {}) {
     const sh = shSum(coef, x, y, z);
     const sw = (th - shoulderAt) / shoulderW;
     const sh2 = shoulder * Math.exp(-sw * sw) * (1 + lobeAmt * Math.cos(lobes * psi + lobePhase + 0.8 * Math.sin(psi * 3 + lobePhase)));
-    let r = r0 * (1 + sh + sh2);
+    let bump = 0;
+    for (const [bx, by, bz, k, amp] of bumps) {
+      const c = x * bx + y * by + z * bz;
+      if (c > 0.8) bump += amp * Math.exp(-(1 - c) * k);
+    }
+    let r = r0 * (1 + sh + sh2 + bump);
     const smooth0 = r;
     const sd = th / stemW;
     r -= stemDip * Math.exp(-sd * sd);
@@ -230,18 +240,19 @@ export function createShape(seed = 1, opts = {}) {
     const psi = Math.atan2(d[2], d[0]);
     const X = rho * Math.cos(psi), Z = rho * Math.sin(psi);
     const rc = calyxOutline(psi), u = rho / rc;
-    const edge = smooth(rc + 0.00007, rc - 0.0001, rho);
-    const thick = 0.00014 + 0.00055 * Math.pow(Math.max(0, 1 - u * u), 0.8) + 0.00025 * Math.exp(-((rho / (calyx.stemR * 1.5)) ** 2));
+    const edge = smooth(rc + 0.00005, rc - 0.0003, rho);
+    const thick = 0.00003 + 0.0006 * Math.pow(Math.max(0, 1 - u * u), 1.3) + 0.00025 * Math.exp(-((rho / (calyx.stemR * 1.5)) ** 2));
     const lift = sepalLift(psi) * smooth(0.45, 1, u) ** 2;
     const cal = edge * (thick + lift);
     const [tx, tz] = calyx.stemTilt, [kx, kz] = calyx.stemCut;
     const ox = tx * calyx.stemH * 0.6, oz = tz * calyx.stemH * 0.6;
     const rs = Math.hypot(X - ox, Z - oz), ps = Math.atan2(Z - oz, X - ox);
-    const sr = calyx.stemR * (1 + 0.06 * Math.sin(ps * 2 + calyx.brown * 6) + 0.03 * Math.sin(ps * 5 + 1.3));
-    const wall = smooth(sr + 0.00012, sr - 0.00012, rs);
-    const top = calyx.stemH + 0.0008 + (kx * (X - ox) + kz * (Z - oz)) * 0.35 - 0.00012 * Math.exp(-((rs / (sr * 0.45)) ** 2));
-    const flare = 0.00035 * Math.exp(-(((rs - sr) / 0.00045) ** 2)) * (rs > sr ? 1 : 0);
-    return Math.max(cal + flare * edge, wall * top);
+    const sr = calyx.stemR * (1 + 0.07 * Math.sin(ps * 2 + calyx.brown * 6) + 0.04 * Math.sin(ps * 5 + 1.3) + 0.02 * Math.sin(ps * 11 + 2.1));
+    const rTop = sr * 0.7, rBase = sr * 2.1;
+    const fall = 1 - smooth(rTop, rBase, rs);
+    const top = calyx.stemH * 0.8 + 0.0005 + (kx * (X - ox) + kz * (Z - oz)) * 0.35 - 0.00012 * Math.exp(-((rs / (sr * 0.4)) ** 2));
+    const stub = top * Math.pow(fall, 2.2);
+    return Math.max(cal, stub);
   }
   const shape = {
     seed, calyxOutline, sepalLift, a, c, axis, base, tilt: Math.acos(axis[1]), navelOpen, navelDepth, calyx, flavedoMean: flavedo, pithMean: pith, poleR,
@@ -387,7 +398,7 @@ function uploadCube(gl, faces, internal, type, filter) {
 }
 
 function bakeShapeCube(gl, sample, size = SHAPE_SIZE) {
-  const texture = uploadCube(gl, shapeCubeData(sample, size), gl.RGBA16F, gl.FLOAT, gl.LINEAR);
+  const texture = uploadCube(gl, shapeCubeData(sample, size), gl.getExtension('OES_texture_float_linear') ? gl.RGBA32F : gl.RGBA16F, gl.FLOAT, gl.LINEAR);
   return { cube: texture.tex, texture, size };
 }
 
