@@ -82,10 +82,10 @@ export const SCENES = {
     label: 'Studio',
     env: {
       top: [0.4, 0.4, 0.41], horizon: [0.5, 0.5, 0.5], bottom: [0.85, 0.84, 0.83],
-      hdri: { url: new URL('../assets/hdri/monochrome_studio_03_1k.hdr', import.meta.url).href, scale: 1.1, yaw: 0, clamp: 3 },
+      hdri: { url: new URL('../assets/hdri/monochrome_studio_03_1k.hdr', import.meta.url).href, scale: 0.75, yaw: 0, clamp: 3 },
       lights: [
-        light([0.235, 0.883, -0.407], [0, 1, 0], [0.64, 0.51], [1, 0.99, 0.97], 3.0, 0.2, { core: [5, 0.24], strip: [3, 0.05] }),
-        light([0.0, 0.3, 1], [0, 1, 0], [1.0, 0.75], [1, 0.995, 0.99], 0.43, 0.6),
+        light([0.235, 0.883, -0.407], [0, 1, 0], [0.38, 0.3], [1, 0.99, 0.97], 10.2, 0.2, { core: [4, 0.35] }),
+        light([-0.45, 0.45, 0.75], [0, 1, 0], [0.45, 0.35], [1, 0.995, 0.99], 2.0, 0.5, { core: [2, 0.4] }),
         light([-0.75, 0.35, -0.55], [0, 1, 0], [0.4, 0.12], [1, 1, 1], 1.2, 0.25),
       ],
     },
