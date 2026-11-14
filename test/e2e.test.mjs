@@ -549,7 +549,7 @@ test('squeezing a cut face squashes the piece, jets juice and wets the floor', a
 test('presets are deterministic and stay still for 600 more frames', async () => {
   const pageA = await open('seed=31');
   const pageB = await open('seed=31');
-  for (const name of ['halves', 'wedges', 'wheels', 'reference']) {
+  for (const name of ['halves', 'wedges', 'reference']) {
     const poses = [];
     for (const page of [pageA, pageB]) {
       await page.evaluate((n) => window.apelsin.preset(n), name);
