@@ -44,9 +44,12 @@ export function createRenderer(gl, canvas, { tier = 'high' } = {}) {
   const shadows = createShadows(gl, TIERS[tier].shadow, TIERS[tier].ground);
   const post = createPost(gl);
   const prepassProg = program(gl, UBER_VS, uberFragment(null, 'prepass'), { label: 'prepass' });
+  const TERMS = { wall: 1, cell: 2, deep: 4, strand: 8, relief: 16, wet: 32, sacheight: 64 };
+  const debugTerm = (new URLSearchParams(location.search).get('debugterm') || '').split(',').reduce((m, k) => m | (TERMS[k] || 0), 0);
+  const termDefs = debugTerm ? { DEBUGTERM: debugTerm } : {};
   const pieceProgs = {
-    prepass: program(gl, PIECE_VS, pieceFragment('prepass'), { label: 'piece-prepass' }),
-    main: program(gl, PIECE_VS, pieceFragment('main'), { label: 'piece-main', defines: gl.caps.floatTargets ? {} : { OUTPUT_SCALE: 0.25 } }),
+    prepass: program(gl, PIECE_VS, pieceFragment('prepass'), { label: 'piece-prepass', defines: termDefs }),
+    main: program(gl, PIECE_VS, pieceFragment('main'), { label: 'piece-main', defines: { ...termDefs, ...(gl.caps.floatTargets ? {} : { OUTPUT_SCALE: 0.25 }) } }),
     shadow: program(gl, PIECE_VS, pieceFragment('shadow'), { label: 'piece-shadow', defines: { SHADOW: 1 } }),
   };
   shadows.setPieces({ prog: pieceProgs.shadow, draw: (prog, d, dir) => bindPiece(gl, prog, d, [-dir[0], -dir[1], -dir[2], 0], r.orangeTextures) });
