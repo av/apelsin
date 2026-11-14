@@ -1,22 +1,38 @@
 import { program, use, set, ubo, fbo, target, formats, bind, destroy, texture, mesh } from './gl.js';
 import { FRAME_UBO_FLOATS } from './shaders/common.js';
-import { UBER_VS, uberFragment, MATERIALS, ATTRIBS } from './shaders/materials.js';
+import { UBER_VS, uberFragment, MATERIALS, ATTRIBS, GROUND_RECEIVERS } from './shaders/materials.js';
 import { ORANGE_UBO_FLOATS } from './orange/params.js';
+import { ORANGE_UBO } from './orange/glsl.js';
 import { createIBL } from './ibl.js';
 import { createShadows } from './shadows.js';
 import { createPost } from './post.js';
-import { keyLight } from './scenes.js';
+import { keyLight, gradeOf } from './scenes.js';
 import { STRIDE } from './orange/mesh.js';
+import { mat4 } from './math.js';
 
 export const TIERS = {
-  low: { name: 'low', index: 0, scale: 0.6, shadow: 1024, ssao: false, aoSamples: 0, aoRadius: 0.04, sss: false, taa: false, bloom: false, grain: 0.004 },
-  medium: { name: 'medium', index: 1, scale: 0.75, shadow: 2048, ssao: true, aoSamples: 8, aoRadius: 0.045, sss: true, taa: true, bloom: true },
-  high: { name: 'high', index: 2, scale: 1, shadow: 2048, ssao: true, aoSamples: 12, aoRadius: 0.05, sss: true, taa: true, bloom: true },
-  ultra: { name: 'ultra', index: 3, scale: 1, shadow: 4096, ssao: true, aoSamples: 16, aoRadius: 0.05, sss: true, taa: true, bloom: true },
+  low: { name: 'low', index: 0, scale: 0.6, shadow: 1024, ssao: false, aoSamples: 0, aoRadius: 0.04, sss: false, sssTaps: 0, keySamples: 3, taa: false, bloom: false, grainScale: 0.5, dofTaps: 24, dofRadius: 10 },
+  medium: { name: 'medium', index: 1, scale: 0.75, shadow: 2048, ssao: true, aoSamples: 8, aoRadius: 0.03, sss: true, sssTaps: 7, keySamples: 4, taa: true, bloom: true, sharpen: 0.25, dofTaps: 32, dofRadius: 14 },
+  high: { name: 'high', index: 2, scale: 1, shadow: 2048, ssao: true, aoSamples: 12, aoRadius: 0.03, sss: true, sssTaps: 11, keySamples: 5, taa: true, bloom: true, sharpen: 0.2, dofTaps: 48, dofRadius: 18 },
+  ultra: { name: 'ultra', index: 3, scale: 1, shadow: 4096, ssao: true, aoSamples: 16, aoRadius: 0.03, sss: true, sssTaps: 16, keySamples: 7, taa: true, bloom: true, sharpen: 0.2, dofTaps: 64, dofRadius: 22 },
 };
 export const TIER_NAMES = Object.keys(TIERS);
 
-const F = { viewProj: 0, view: 16, proj: 32, invViewProj: 48, viewProjNJ: 64, prevViewProjNJ: 80, lightViewProj: 96, camPos: 112, resolution: 116, jitter: 120, keyDir: 124, occluderTint: 128, shadow: 132, env: 136, shEnv: 140, shKey: 176, wet: 212, flags: 216, background: 220 };
+const F = { viewProj: 0, view: 16, proj: 32, invViewProj: 48, viewProjNJ: 64, prevViewProjNJ: 80, lightViewProj: 96, camPos: 112, resolution: 116, jitter: 120, keyDir: 124, occluderTint: 128, shadow: 132, env: 136, shEnv: 140, shKey: 176, wet: 212, flags: 216, background: 220, ground: 224, ground2: 228, occluderMfp: 232, keyShape: 236 };
+
+function uboOffset(glsl, name) {
+  const body = glsl.slice(glsl.indexOf('{') + 1, glsl.lastIndexOf('}'));
+  let offset = 0;
+  for (const decl of body.split(';')) {
+    const m = decl.trim().match(/^(vec4|mat4)\s+(\w+)(?:\[(\d+)\])?/);
+    if (!m) continue;
+    if (m[2] === name) return offset;
+    offset += (m[1] === 'mat4' ? 16 : 4) * (m[3] ? +m[3] : 1);
+  }
+  return -1;
+}
+const FLESH_OFFSET = uboOffset(ORANGE_UBO, 'oFlesh');
+const RIND_OFFSET = uboOffset(ORANGE_UBO, 'oRind');
 
 export function createRenderer(gl, canvas, { tier = 'high' } = {}) {
   const fmt = formats(gl);
@@ -27,14 +43,14 @@ export function createRenderer(gl, canvas, { tier = 'high' } = {}) {
   const post = createPost(gl);
   const prepassProg = program(gl, UBER_VS, uberFragment(null, 'prepass'), { label: 'prepass' });
   const materialProgs = {};
-  const materialProgram = (name) => materialProgs[name] || (materialProgs[name] = program(gl, UBER_VS, uberFragment(name, 'main'), { label: `material-${name}`, defines: { [`MATERIAL_${name.toUpperCase()}`]: 1 } }));
+  const materialProgram = (name) => materialProgs[name] || (materialProgs[name] = program(gl, UBER_VS, uberFragment(name, 'main'), { label: `material-${name}`, defines: { [`MATERIAL_${name.toUpperCase()}`]: 1, ...(GROUND_RECEIVERS.includes(name) ? { GROUND_RECEIVER: 1 } : {}) } }));
   for (const name of Object.keys(MATERIALS)) materialProgram(name);
   const white = texture(gl, { width: 1, height: 1, internal: gl.RGBA8, format: gl.RGBA, type: gl.UNSIGNED_BYTE, data: new Uint8Array([255, 255, 255, 255]) });
   const black = texture(gl, { width: 1, height: 1, internal: gl.RGBA8, format: gl.RGBA, type: gl.UNSIGNED_BYTE, data: new Uint8Array([0, 0, 0, 255]) });
 
   const r = {
     gl, ibl, shadows, post, tier: TIERS[tier], width: 0, height: 0, targets: {}, fbos: {}, scene: null, backdrop: [],
-    exposure: 1, tonemapMode: 'neutral', resetHistory: true, stats: { frameMs: 0 },
+    exposure: 1, tonemapMode: 'photo', resetHistory: true, stats: { frameMs: 0 }, fleshTint: [1, 0.55, 0.02], rindTint: [1, 0.3, 0.004],
   };
 
   function resize() {
@@ -53,11 +69,12 @@ export function createRenderer(gl, canvas, { tier = 'high' } = {}) {
     t.velocity = target(gl, w, h, fmt.rg, { filter: gl.NEAREST });
     t.diffuse = target(gl, w, h, fmt.hdr);
     t.specular = target(gl, w, h, fmt.hdr);
+    t.albedo = target(gl, w, h, fmt.rgba8, { filter: gl.NEAREST });
     t.hdr = target(gl, w, h, fmt.hdr);
     t.hdrCopy = target(gl, w, h, fmt.hdr);
     r.fbos = {
       prepass: fbo(gl, [t.normal, t.velocity], t.depth),
-      main: fbo(gl, [t.diffuse, t.specular], t.depth),
+      main: fbo(gl, [t.diffuse, t.specular, t.albedo], t.depth),
       hdr: fbo(gl, [t.hdr], t.depth),
       combine: fbo(gl, [t.hdr]),
       hdrCopy: fbo(gl, [t.hdrCopy]),
@@ -90,6 +107,9 @@ export function createRenderer(gl, canvas, { tier = 'high' } = {}) {
   function setOrange(packed) {
     orangeUbo.data.set(packed);
     orangeUbo.upload();
+    const tint = (offset) => { const f = Array.from(packed.slice(offset, offset + 3)); const m = Math.max(...f, 1e-3); return f.map((x) => x / m); };
+    if (FLESH_OFFSET >= 0) r.fleshTint = tint(FLESH_OFFSET);
+    if (RIND_OFFSET >= 0) r.rindTint = tint(RIND_OFFSET);
   }
 
   function fillFrame(frame, camera) {
@@ -102,13 +122,18 @@ export function createRenderer(gl, canvas, { tier = 'high' } = {}) {
     d.set([...camera.jitter, 0, 0], F.jitter);
     const key = keyLight(scene);
     d.set([...key.dir, key.tanHalf], F.keyDir);
-    d.set(scene.occluderTint || [1, 1, 1, 0], F.occluderTint);
-    d.set([1 / shadows.size, shadows.state.extent, shadows.state.range, frame.shadowCasters ? 1 : 0], F.shadow);
+    const occ = scene.occluder || {};
+    d.set([...r.rindTint.map((x) => x + (1 - x) * (occ.bounceWhite ?? 0.3)), occ.bounce ?? 0.5], F.occluderTint);
+    d.set([1 / shadows.size, shadows.state.extent, shadows.state.range, frame.shadowCasters ? (shadows.hasBack ? 2 : 1) : 0], F.shadow);
     d.set([scene.envIntensity, scene.keyIntensity, ibl.cubeScale, ibl.maxMip], F.env);
     d.set(ibl.shEnv, F.shEnv); d.set(ibl.shKey, F.shKey);
     d.set([frame.wetExtent || 0.35, frame.wetness ? 1 : 0, frame.wetSize || 512, 0], F.wet);
     d.set([r.tier.index, r.tier.ssao ? 1 : 0, r.tier.sss ? 1 : 0, r.tier.taa ? 1 : 0], F.flags);
     d.set(scene.background, F.background);
+    d.set(shadows.state.ground, F.ground);
+    d.set([frame.shadowCasters && shadows.ground ? 1 : 0, ...r.fleshTint], F.ground2);
+    d.set([...(occ.mfp || [0.009, 0.0032, 0.0012]), occ.leak ?? 0.5], F.occluderMfp);
+    d.set([key.tanX, key.tanY, 0, 0], F.keyShape);
     frameUbo.upload();
   }
 
@@ -117,6 +142,9 @@ export function createRenderer(gl, canvas, { tier = 'high' } = {}) {
     set(prog, 'uKeyCube', ibl.key);
     set(prog, 'uBrdfLut', ibl.lut);
     set(prog, 'uShadowMap', shadows.texture);
+    set(prog, 'uShadowBack', shadows.back || black);
+    set(prog, 'uGroundAO', shadows.ground || white);
+    set(prog, 'uGroundKey', shadows.groundKey || white);
     set(prog, 'uAO', ctx.ao || white);
     set(prog, 'uWetness', ctx.frame.wetness || black);
   }
@@ -185,8 +213,20 @@ export function createRenderer(gl, canvas, { tier = 'high' } = {}) {
     { name: 'taa', enabled: (ctx) => ctx.tier.taa, run: (ctx) => post.taa(ctx) },
     { name: 'dof', enabled: (ctx) => ctx.frame.macro, run: (ctx) => post.dof(ctx) },
     { name: 'bloom', enabled: (ctx) => ctx.tier.bloom, run: (ctx) => post.bloom(ctx) },
-    { name: 'tonemap', run: (ctx) => post.tonemap(ctx) },
+    { name: 'tonemap', run: (ctx) => { if (r.debugTexture) { ctx.color = r.debugTexture(); ctx.bloom = null; } post.tonemap(ctx); } },
   ];
+
+  function focusUv(frame, camera, casters) {
+    const project = (p) => { const c = mat4.transformPoint(camera.viewProjNJ, p); return [c[0] * 0.5 + 0.5, c[1] * 0.5 + 0.5]; };
+    if (frame.focusPoint) return project(frame.focusPoint);
+    let best = null, bestD = Infinity;
+    for (const c of casters) {
+      const uv = project(c.centre);
+      const d = Math.hypot(uv[0] - 0.5, (uv[1] - 0.5) * 0.8);
+      if (d < bestD) { bestD = d; best = uv; }
+    }
+    return best ? best.map((x) => Math.min(0.98, Math.max(0.02, x))) : [0.5, 0.5];
+  }
 
   function render(frame) {
     resize();
@@ -201,13 +241,19 @@ export function createRenderer(gl, canvas, { tier = 'high' } = {}) {
       const centre = lo.map((v, k) => (v + hi[k]) / 2);
       const radius = Math.hypot(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]) / 2;
       shadows.fit(centre, radius, key.dir);
+      const floorY = r.scene.floorAt ? r.scene.floorAt(centre[0], centre[2]) : 0;
+      const occ = r.scene.occluder || {};
+      shadows.keySamples = r.tier.keySamples;
+      shadows.fitGround(centre, Math.hypot(hi[0] - lo[0], hi[2] - lo[2]) / 2, floorY, r.scene.groundReach ?? 0.09, key, { tint: r.fleshTint, mfp: occ.mfp || [0.009, 0.0032, 0.0012], strength: occ.leak ?? 0.5 });
     }
     fillFrame({ ...frame, shadowCasters: casters.length }, camera);
     const drawables = [...frame.drawables, ...r.backdrop];
+    const grade = gradeOf(r.scene);
     const ctx = {
       gl, renderer: r, frame, camera, drawables, tier: r.tier, targets: r.targets, fbos: r.fbos, ibl, post,
       width: r.width, height: r.height, ao: null, color: null, bloom: null, black, white,
-      grade: { desaturation: r.scene.desaturation ?? 0.15, white: r.scene.white ?? 1, vignette: r.scene.vignette ?? 0.25 }, exposure: r.exposure * (frame.exposure ?? 1), tonemapMode: r.tonemapMode, resetHistory: r.resetHistory, focus: frame.focus || 0.4,
+      grade, exposure: r.exposure * (frame.exposure ?? 1), tonemapMode: grade.tonemap || r.tonemapMode, resetHistory: r.resetHistory,
+      focus: frame.focus || 0.4, focusUv: frame.macro ? focusUv(frame, camera, casters) : [0.5, 0.5], fStop: frame.fStop || r.scene.fStop || 4,
     };
     gl.disable(gl.CULL_FACE);
     gl.disable(gl.BLEND);

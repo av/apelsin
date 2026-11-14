@@ -145,12 +145,14 @@ export const MATERIALS = {
   slate: WETNESS + SLATE,
 };
 
+export const GROUND_RECEIVERS = ['cove', 'board', 'counter', 'slate'];
+
 export const MATERIAL_IDS = Object.fromEntries(Object.keys(MATERIALS).map((k, i) => [k, i]));
 
 export function uberFragment(material, pass) {
   const outputs = pass === 'prepass'
     ? 'layout(location = 0) out vec4 outNormal;\nlayout(location = 1) out vec4 outVelocity;\n'
-    : pass === 'shadow' ? 'out vec4 outColor;\n' : 'layout(location = 0) out vec4 outDiffuse;\nlayout(location = 1) out vec4 outSpecular;\n';
+    : pass === 'shadow' ? 'out vec4 outColor;\n' : 'layout(location = 0) out vec4 outDiffuse;\nlayout(location = 1) out vec4 outSpecular;\nlayout(location = 2) out vec4 outAlbedo;\n';
   const body = pass === 'prepass' ? `
   vec3 Nv = normalize(mat3(uView) * N);
   outNormal = vec4(Nv * 0.5 + 0.5, 1.0);
@@ -161,7 +163,8 @@ export function uberFragment(material, pass) {
   vec3 diffuse, specular;
   shadeSurface(s, si, diffuse, specular);
   outDiffuse = vec4(diffuse, encodeProfile(s));
-  outSpecular = vec4(specular, 1.0);`;
+  outSpecular = vec4(specular, 1.0);
+  outAlbedo = vec4(s.albedo, 1.0);`;
   return FRAME_UBO + NOISE + SURFACE + (pass === 'main' ? LIGHTING : '') + `
 uniform vec4 uMaterialColor;
 uniform mat4 uModel;

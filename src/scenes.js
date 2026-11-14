@@ -54,14 +54,16 @@ export const SCENES = {
   studio: {
     label: 'Studio',
     env: {
-      top: [0.3, 0.3, 0.31], horizon: [0.36, 0.36, 0.36], bottom: [0.8, 0.79, 0.78],
+      top: [0.42, 0.42, 0.43], horizon: [0.55, 0.55, 0.55], bottom: [1.0, 0.99, 0.98],
       lights: [
-        light([0.235, 0.883, -0.407], [0, 1, 0], [0.64, 0.51], [1, 0.99, 0.97], 4.2, 0.3),
-        light([0.0, 0.84, 1], [0, 1, 0], [0.6, 0.3], [1, 0.99, 0.98], 2.2, 0.35),
-        light([-0.75, 0.35, -0.55], [0, 1, 0], [0.4, 0.12], [1, 1, 1], 2, 0.2),
+        light([0.235, 0.883, -0.407], [0, 1, 0], [0.64, 0.51], [1, 0.99, 0.97], 2.6, 0.35),
+        light([0.0, 0.3, 1], [0, 1, 0], [1.0, 0.75], [1, 0.995, 0.99], 1.0, 0.6),
+        light([-0.75, 0.35, -0.55], [0, 1, 0], [0.4, 0.12], [1, 1, 1], 1.2, 0.25),
       ],
     },
-    envIntensity: 1, keyIntensity: 1, exposure: 1.12, desaturation: 0.04, white: 0.965, vignette: 0, occluderTint: [0.62, 0.3, 0.17, 1], background: [2, 1, 0, 0],
+    envIntensity: 1, keyIntensity: 1, exposure: 1.2, background: [2, 1, 0, 0],
+    occluder: { bounce: 0.6, leak: 0.6, mfp: [0.009, 0.0032, 0.0012] },
+    grade: { white: 1.3, contrast: 1.0, saturation: 1.06, vignette: 0, grain: 0.004, bloom: 0.04, bloomThreshold: 2.4 },
     backdrop: [{ material: 'cove', data: coveMesh, color: [0.9, 0.9, 0.9, 1] }],
     colliders: [{ size: [10, 1, 10], centre: [0, -0.5, 0] }, { size: [10, 4, 1], centre: [0, 2, -1.65] }],
     camera: { target: [0, 0.03, 0], yaw: 0.35, pitch: 0.3, distance: 0.42 },
@@ -109,5 +111,11 @@ export const SCENE_NAMES = Object.keys(SCENES);
 
 export function keyLight(scene) {
   const l = scene.env.lights[0];
-  return { dir: l.dir, tanHalf: Math.tan(Math.max(l.size[0], l.size[1])) };
+  return { dir: l.dir, up: l.up, tanHalf: Math.tan((l.size[0] + l.size[1]) / 2), tanX: Math.tan(l.size[0]), tanY: Math.tan(l.size[1]) };
+}
+
+const GRADE = { tonemap: 'photo', white: 1.3, contrast: 1, saturation: 1, balance: [1, 1, 1], pathToWhite: 2, toe: 0, vignette: 0, grain: 0.006, bloom: 0.05, bloomThreshold: 2 };
+
+export function gradeOf(scene) {
+  return { ...GRADE, ...(scene.grade || {}) };
 }

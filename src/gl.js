@@ -50,12 +50,13 @@ export function program(gl, vs, fs, { defines = {}, label = 'program', attribs =
     console.error(msg);
     throw new Error(msg);
   }
-  const uniforms = {};
+  const uniforms = {}, types = {};
   const n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
   for (let i = 0; i < n; i++) {
     const u = gl.getActiveUniform(p, i);
     const loc = gl.getUniformLocation(p, u.name);
-    if (loc) uniforms[u.name.replace(/\[0\]$/, '')] = loc;
+    const key = u.name.replace(/\[0\]$/, '');
+    if (loc) { uniforms[key] = loc; types[key] = u.type; }
   }
   for (const [name, binding] of Object.entries(UBO_BINDINGS)) {
     const idx = gl.getUniformBlockIndex(p, name);
@@ -71,7 +72,7 @@ export function program(gl, vs, fs, { defines = {}, label = 'program', attribs =
       gl.uniform1i(uniforms[u.name], unit++);
     }
   }
-  return { gl, handle: p, uniforms, samplers, label };
+  return { gl, handle: p, uniforms, types, samplers, label };
 }
 
 export const UBO_BINDINGS = { Frame: 0, Orange: 1, Scene: 2 };
@@ -94,8 +95,13 @@ export function set(prog, name, v) {
     else gl.bindTexture(gl.TEXTURE_2D, v ? (v.tex || v) : null);
     return;
   }
-  if (typeof v === 'number') gl.uniform1f(loc, v);
+  const type = prog.types?.[name];
+  if (type === gl.INT || type === gl.BOOL) gl.uniform1i(loc, +v);
+  else if (typeof v === 'number') gl.uniform1f(loc, v);
   else if (typeof v === 'boolean') gl.uniform1i(loc, v ? 1 : 0);
+  else if (type === gl.FLOAT_VEC4) gl.uniform4fv(loc, v);
+  else if (type === gl.FLOAT_VEC3) gl.uniform3fv(loc, v);
+  else if (type === gl.FLOAT_VEC2) gl.uniform2fv(loc, v);
   else if (v.length === 2) gl.uniform2fv(loc, v);
   else if (v.length === 3) gl.uniform3fv(loc, v);
   else if (v.length === 4) gl.uniform4fv(loc, v);

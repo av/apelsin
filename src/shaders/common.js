@@ -19,10 +19,14 @@ layout(std140) uniform Frame {
   vec4 uWetParams;
   vec4 uFlags;
   vec4 uBackground;
+  vec4 uGround;
+  vec4 uGround2;
+  vec4 uOccluderMfp;
+  vec4 uKeyShape;
 };
 `;
 
-export const FRAME_UBO_FLOATS = 16 * 7 + 4 * (7 + 18 + 3);
+export const FRAME_UBO_FLOATS = 16 * 7 + 4 * (7 + 18 + 3 + 4);
 
 export const NOISE = `
 uvec3 pcg3d(uvec3 v) {
@@ -104,11 +108,15 @@ Surface defaultSurface(vec3 N) {
 vec3 perturb(vec3 N, vec3 grad, float k) { return normalize(N - k * (grad - N * dot(grad, N))); }
 `;
 
+
 export const LIGHTING = `
 uniform samplerCube uEnvCube;
 uniform samplerCube uKeyCube;
 uniform sampler2D uBrdfLut;
 uniform sampler2D uShadowMap;
+uniform sampler2D uShadowBack;
+uniform sampler2D uGroundAO;
+uniform sampler2D uGroundKey;
 uniform sampler2D uAO;
 const float PI = 3.14159265;
 vec3 evalSH(vec4 sh[9], vec3 n) {
@@ -129,32 +137,41 @@ const vec2 POISSON[16] = vec2[](
 vec3 shadowCoord(vec3 world, vec3 N) {
   vec3 L = uKeyDir.xyz;
   float slope = 1.0 - clamp(dot(N, L), 0.0, 1.0);
-  vec4 c = uLightViewProj * vec4(world + N * (0.0006 + 0.0015 * slope), 1.0);
+  vec4 c = uLightViewProj * vec4(world + N * (0.0004 + 0.0012 * slope), 1.0);
   return c.xyz / c.w * 0.5 + 0.5;
 }
-float keyShadow(vec3 world, vec3 N) {
-  if (uShadowParams.w < 0.5) return 1.0;
+float shadowNoise() { return ign(gl_FragCoord.xy + uJitter.xy * 4096.0) * 6.2831853; }
+vec3 occluderLeak(float thickness) {
+  return uGround2.yzw * exp(-thickness / max(uOccluderMfp.rgb, vec3(1e-5))) * uOccluderMfp.w;
+}
+vec3 keyShadow(vec3 world, vec3 N) {
+  if (uShadowParams.w < 0.5) return vec3(1.0);
   vec3 sc = shadowCoord(world, N);
-  if (any(lessThan(sc.xy, vec2(0.0))) || any(greaterThan(sc.xy, vec2(1.0))) || sc.z > 1.0) return 1.0;
-  float range = uShadowParams.z, tanA = uKeyDir.w, extent = uShadowParams.y;
-  float a = ign(gl_FragCoord.xy + uJitter.xy * 1000.0) * 6.2831853;
+  if (any(lessThan(sc.xy, vec2(0.0))) || any(greaterThan(sc.xy, vec2(1.0))) || sc.z > 1.0) return vec3(1.0);
+  float texel = uShadowParams.x, extent = uShadowParams.y, range = uShadowParams.z, tanA = uKeyDir.w;
+  float a = shadowNoise();
   mat2 rot = mat2(cos(a), sin(a), -sin(a), cos(a));
-  float search = clamp(tanA * 0.06 / extent, uShadowParams.x * 2.0, 0.2);
-  float blockers = 0.0, sum = 0.0;
+  float searchWorld = tanA * min(sc.z * range, 0.08);
+  float search = clamp(searchWorld / (2.0 * extent), texel * 2.0, 0.3);
+  float blockers = 0.0, count = 0.0;
   for (int i = 0; i < 16; i++) {
     float d = texture(uShadowMap, sc.xy + rot * POISSON[i] * search).r;
-    if (d < sc.z - 0.0005) { blockers += d; sum += 1.0; }
+    if (d < sc.z - 0.0003) { blockers += d; count += 1.0; }
   }
-  if (sum < 0.5) return 1.0;
-  float zb = blockers / sum;
-  float pen = clamp((sc.z - zb) * range * tanA / extent, uShadowParams.x * 1.5, 0.25);
-  float lit = 0.0;
+  if (count < 0.5) return vec3(1.0);
+  float zb = blockers / count;
+  float penWorld = (sc.z - zb) * range * tanA;
+  float pen = clamp(penWorld / (2.0 * extent), texel * 1.5, 0.3);
   int taps = int(uFlags.x) >= 2 ? 32 : 16;
+  vec3 lit = vec3(0.0);
   for (int i = 0; i < 32; i++) {
     if (i >= taps) break;
-    vec2 o = rot * POISSON[i & 15] * (i >= 16 ? 0.55 : 1.0);
-    float d = texture(uShadowMap, sc.xy + o * pen).r;
-    lit += d < sc.z - 0.0004 ? 0.0 : 1.0;
+    vec2 o = rot * POISSON[i & 15] * (i >= 16 ? 0.5 : 1.0);
+    vec2 uv = sc.xy + o * pen;
+    float front = texture(uShadowMap, uv).r;
+    if (front >= sc.z - 0.0002) { lit += 1.0; continue; }
+    float back = uShadowParams.w > 1.5 ? texture(uShadowBack, uv).r : 0.0;
+    lit += occluderLeak(back > front ? (min(sc.z, back) - front) * range : 0.03);
   }
   return lit / float(taps);
 }
@@ -162,50 +179,97 @@ float keyThickness(vec3 world) {
   vec4 c = uLightViewProj * vec4(world, 1.0);
   vec3 sc = c.xyz / c.w * 0.5 + 0.5;
   if (any(lessThan(sc.xy, vec2(0.0))) || any(greaterThan(sc.xy, vec2(1.0)))) return 1.0;
-  float d = texture(uShadowMap, sc.xy).r;
+  float a = shadowNoise();
+  vec2 o = vec2(cos(a), sin(a)) * uShadowParams.x * 1.5;
+  float d = min(texture(uShadowMap, sc.xy + o).r, texture(uShadowMap, sc.xy - o).r);
   return max(sc.z - d, 0.0) * uShadowParams.z;
+}
+float groundCoverage(vec3 world, out vec2 uv) {
+  uv = (world.xz - uGround.xy) * uGround.z + 0.5;
+  if (uGround2.x < 0.5) return 0.0;
+  vec2 e = min(uv, 1.0 - uv);
+  return smoothstep(0.0, 0.04, min(e.x, e.y)) * (1.0 - smoothstep(0.004, 0.02, abs(world.y - uGround.w)));
+}
+vec4 groundOcclusion(vec3 world, out vec3 key, out float coverage) {
+  vec2 uv;
+  coverage = groundCoverage(world, uv);
+  key = vec3(1.0);
+  if (coverage <= 0.0) return vec4(0, 1, 0, 1);
+  vec4 g = texture(uGroundAO, uv);
+  key = texture(uGroundKey, uv).rgb;
+  vec3 bent = normalize(g.xyz * 2.0 - 1.0);
+  return mix(vec4(0, 1, 0, 1), vec4(bent, g.w), coverage);
 }
 float screenAO() { return uFlags.y > 0.5 ? texture(uAO, gl_FragCoord.xy * uResolution.zw).r : 1.0; }
 float D_GGX(float NoH, float a) { float a2 = a * a; float d = NoH * NoH * (a2 - 1.0) + 1.0; return a2 / (PI * d * d); }
 vec3 envSpec(samplerCube cube, vec3 R, float rough) { return textureLod(cube, R, rough * uEnvParams.w).rgb; }
 float encodeProfile(Surface s) { return s.sssProfile < 0.5 ? 0.0 : (floor(s.sssProfile + 0.5) + clamp(s.sssWidth, 0.0, 0.99)) * 0.25; }
-void shadeSurface(Surface s, SurfaceInput si, out vec3 diffuse, out vec3 specular) {
-  vec3 N = s.N, V = si.V, L = uKeyDir.xyz;
-  float NoV = clamp(dot(N, V), 1e-4, 1.0);
-  float rough = clamp(s.roughness, 0.03, 1.0);
+vec3 profileMfp(float profile) {
+  return profile > 2.5 ? vec3(0.010, 0.0036, 0.0008) : profile > 1.5 ? vec3(0.0024, 0.0018, 0.001) : vec3(0.0012, 0.0004, 0.00015);
+}
+vec3 specularLobe(vec3 f0, float rough, float NoV, out vec3 single) {
   vec2 lut = texture(uBrdfLut, vec2(NoV, rough)).rg;
-  vec3 single = s.f0 * lut.x + lut.y;
-  vec3 energy = 1.0 + s.f0 * (1.0 / max(lut.x + lut.y, 1e-3) - 1.0);
-  vec3 specColor = single * energy;
+  single = f0 * lut.x + lut.y;
+  vec3 energy = 1.0 + f0 * (1.0 / max(lut.x + lut.y, 1e-3) - 1.0);
+  return single * energy;
+}
+void shadeSurface(Surface s, SurfaceInput si, out vec3 diffuse, out vec3 specular) {
+  vec3 N = s.N, V = si.V, L = uKeyDir.xyz, Ng = si.normal;
+  if (dot(Ng, V) < 0.0) Ng = -Ng;
+  float NoV = clamp(dot(N, V), 1e-4, 1.0);
+  float rough = clamp(s.roughness, 0.02, 1.0);
+  vec3 single;
+  vec3 specColor = specularLobe(s.f0, rough, NoV, single);
   vec3 R = reflect(-V, N);
-  R = normalize(mix(R, N, rough * rough * 0.5));
+  float horizon = clamp(1.0 + 1.3 * dot(R, Ng), 0.0, 1.0);
+  horizon *= horizon;
+  vec3 Rd = normalize(mix(R, N, rough * rough * 0.5));
   float ao = screenAO() * s.cavity;
-  float specAO = clamp(pow(NoV + ao, exp2(-16.0 * rough - 1.0)) - 1.0 + ao, 0.0, 1.0);
-  float shadow = keyShadow(si.world, si.normal);
+  float specAO = clamp(pow(NoV + ao, exp2(-16.0 * rough - 1.0)) - 1.0 + ao, 0.0, 1.0) * horizon;
   float envI = uEnvParams.x, keyI = uEnvParams.y;
-  vec3 tint = mix(vec3(1.0), uOccluderTint.rgb, uOccluderTint.w);
-  vec3 ambient = shEnv(N) * envI * mix(tint, vec3(1.0), ao) * ao;
-  vec3 keyDiff = shKey(N) * keyI * mix(tint * 0.35, vec3(1.0), shadow);
+  vec3 bounce = uOccluderTint.rgb * uOccluderTint.w;
+  vec3 ambient, shadow;
+#ifdef GROUND_RECEIVER
+  vec3 groundKey;
+  float coverage;
+  vec4 g = groundOcclusion(si.world, groundKey, coverage);
+  shadow = coverage > 0.999 ? groundKey : mix(keyShadow(si.world, Ng), groundKey, coverage);
+  vec3 bentN = normalize(mix(N, g.xyz, 0.85));
+  float vis = g.w;
+  ambient = shEnv(bentN) * envI * vis + shEnv(vec3(0, 1, 0)) * envI * bounce * (1.0 - vis);
+  ao = min(ao, mix(1.0, vis, 0.6));
+  specAO = min(specAO, vis);
+#else
+  shadow = keyShadow(si.world, Ng);
+  ambient = shEnv(N) * envI * (ao + bounce * (1.0 - ao) * 0.45);
+#endif
   vec3 keyIrr = shKey(L) * keyI;
+  vec3 keyDiff = shKey(N) * keyI * shadow;
   float NoL = dot(N, L);
   float wrap = max(0.0, pow(clamp((NoL + 0.45) / 1.45, 0.0, 1.0), 1.6) - clamp(NoL, 0.0, 1.0));
-  vec3 kd = (1.0 - single) * (1.0 - s.clearcoat * 0.04);
-  diffuse = s.albedo * kd * (ambient + keyDiff) + s.sssColor * keyIrr * wrap * mix(0.4, 1.0, shadow);
+  vec3 kd = 1.0 - single;
+  vec3 invAlbedo = 1.0 / max(s.albedo, vec3(0.02));
+  vec3 lum = (shadow.r + shadow.g + shadow.b) / 3.0 * vec3(1.0);
+  diffuse = kd * (ambient + keyDiff) + s.sssColor * invAlbedo * keyIrr * wrap * mix(vec3(0.35), vec3(1.0), lum);
   if (dot(s.transmission, vec3(1)) > 0.0) {
     float t = keyThickness(si.world);
-    float back = clamp(dot(-N, L) * 0.6 + 0.4, 0.0, 1.0);
-    diffuse += s.transmission * keyIrr * exp(-t / 0.007) * back + s.transmission * shEnv(-N) * envI * 0.35 * ao;
+    vec3 T = exp(-t / profileMfp(s.sssProfile));
+    float back = clamp(-NoL * 0.5 + 0.5, 0.0, 1.0);
+    float forward = pow(clamp(dot(V, -L), 0.0, 1.0), 4.0);
+    vec3 through = keyIrr * T * (back + 2.0 * forward) + shEnv(-N) * envI * 0.3 * ao;
+    diffuse += s.transmission * invAlbedo * through;
   }
-  vec3 specEnv = envSpec(uEnvCube, R, rough) * envI * specAO;
-  vec3 specKey = envSpec(uKeyCube, R, rough) * keyI * shadow * mix(1.0, specAO, 0.5);
+  vec3 specEnv = envSpec(uEnvCube, Rd, rough) * envI * specAO;
+  vec3 specKey = envSpec(uKeyCube, Rd, rough) * keyI * shadow * mix(1.0, specAO, 0.5) * horizon;
   specular = (specEnv + specKey) * specColor;
   if (s.clearcoat > 0.0) {
-    float cr = clamp(s.clearcoatRoughness, 0.03, 1.0);
-    vec3 Rc = reflect(-V, N);
-    float Fc = (0.04 + 0.96 * pow(1.0 - NoV, 5.0)) * s.clearcoat;
-    vec3 cc = (envSpec(uEnvCube, Rc, cr) * envI * specAO + envSpec(uKeyCube, Rc, cr) * keyI * shadow) * Fc;
-    diffuse *= 1.0 - Fc;
-    specular = specular * (1.0 - Fc) + cc;
+    float cr = clamp(s.clearcoatRoughness, 0.02, 1.0);
+    vec3 ccSingle;
+    vec3 ccColor = specularLobe(s.f0.g <= 0.03 ? s.f0 : vec3(0.04), cr, NoV, ccSingle) * s.clearcoat;
+    vec3 cc = (envSpec(uEnvCube, R, cr) * envI * specAO + envSpec(uKeyCube, R, cr) * keyI * shadow * horizon) * ccColor;
+    vec3 attenuation = 1.0 - ccSingle * s.clearcoat;
+    diffuse *= attenuation;
+    specular = specular * attenuation + cc;
   }
   specular += s.emission;
 }
