@@ -291,8 +291,8 @@ Surface orangeInterior(SurfaceInput si) {
   float peel = tf + tp * (0.9 + 0.2 * pv.x);
   float yN = p.y / oShape.y;
   float coreBase = oLayers.z * (0.75 + 0.6 * yN * yN);
-  float torn = vnoise(vec3(psi * 3.0, p.y * 260.0, rho * 400.0) + oNoise.xyz);
-  float coreR = coreBase * (0.78 + 0.5 * torn);
+  float torn = 0.6 * vnoise(vec3(cos(psi), sin(psi), p.y * 80.0) * 3.0 + oNoise.xyz) + 0.4 * vnoise(vec3(cos(psi), sin(psi), p.y * 200.0) * 9.0 + oNoise.zxy);
+  float coreR = coreBase * (0.62 + 0.75 * torn);
   float wave = (oSeg.y * sin(p.y * 70.0 + rho * 110.0 + oNoise.x) + oSeg.y * 1.2 * (vnoise(p * 55.0 + oNoise.xyz) - 0.5)) * smoothstep(0.0, 0.012, rho);
   int seg; float rel, segW, edge;
   orangeSegment(psi + wave, seg, rel, segW, edge);
@@ -300,10 +300,10 @@ Surface orangeInterior(SurfaceInput si) {
   float dS = edge * rho;
   float dD = depth - peel;
   float dC = rho - coreR;
-  float kC = 0.0028 + 0.0016 * fract(fseg * 0.37 + oRind.w), kD = 0.0012;
+  float kC = 0.0038 + 0.0024 * fract(fseg * 0.37 + oRind.w), kD = 0.0012;
   float segD = smin(smin(dS, dD, kD), dC, kC);
   float rawMin = min(min(dS, dD), dC);
-  float fill = clamp((rawMin - segD) / 0.0008, 0.0, 1.0);
+  float fill = clamp((rawMin - segD) / 0.0004, 0.0, 1.0);
   float memHalf = oLayers.w * (0.5 + 0.9 * exp(-max(dC, 0.0) / 0.004));
   float memW = max(memHalf, px * 0.7);
   float memCov = memHalf / memW;
@@ -393,7 +393,7 @@ Surface orangeInterior(SurfaceInput si) {
   float segFlesh = smoothstep(memW * 0.4, memW, segD);
   float memCore = 1.0 - smoothstep(0.0, 0.003, dC);
   float thick = max(fill, memCore * 0.6);
-  vec3 memCol = mix(oPith.rgb * vec3(1.0, 0.95, 0.8), albedo, (1.0 - thick) * 0.35);
+  vec3 memCol = mix(vec3(0.93, 0.9, 0.74), albedo, (1.0 - thick) * 0.35);
   float memK = (1.0 - segFlesh) * mix(memCov * 0.8, 1.0, thick);
   albedo = mix(albedo, memCol, memK);
   rough = mix(rough, mix(0.18, 0.45, thick), memK);
@@ -411,7 +411,7 @@ Surface orangeInterior(SurfaceInput si) {
     float holes = smoothstep(0.76, 0.86, pore.x) * (1.0 - smoothstep(0.3, 0.8, px * 5200.0));
     vec3 coreCol = vec3(0.95, 0.925, 0.79) * (0.84 + 0.22 * fib.x);
     coreCol = mix(coreCol, vec3(0.8, 0.62, 0.25), holes * 0.45);
-    coreCol = mix(coreCol, vec3(0.9, 0.72, 0.22), vasc * 0.8);
+    coreCol = mix(coreCol, vec3(0.92, 0.8, 0.4), vasc * 0.6);
     float tuftN = smoothstep(0.45, 0.8, fib.x);
     float cr = clamp(rho / max(coreR, 1e-4), 0.0, 1.0);
     vec3 cg = ePsi * fib.y * 0.18 + pore.yzw * 0.006 + rhoHat * (-2.0 * 0.0007 * cr / max(coreR, 1e-4));
