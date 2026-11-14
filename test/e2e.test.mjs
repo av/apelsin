@@ -288,3 +288,91 @@ test('without webgl2 the page shows a short message instead of a blank page', as
   assert.match(await page.textContent('#nogl'), /WebGL2/);
   await page.close();
 });
+
+async function faceProfile(page, variety) {
+  await page.evaluate(async (v) => {
+    const { quat } = await import('./src/math.js');
+    const { restToWorld } = await import('./src/orange/piece.js');
+    window.apelsin.setVariety(v);
+    const { world, juice } = window.apelsin.internals;
+    world.remove(world.pieces[1]);
+    const piece = world.pieces[0];
+    world.place(piece, [0, 0, 0], quat.fromTo(piece.caps[0].normal, [0, 1, 0]), { sleep: true });
+    juice.clear();
+    window.apelsin.step(2);
+    const centre = restToWorld(piece, [0, piece.caps[0].centroid[1], 0]);
+    window.apelsin.camera({ target: centre, yaw: 0, pitch: 1.5, distance: 0.26, fov: (25 * Math.PI) / 180 });
+  }, variety);
+  await page.evaluate(() => window.apelsin.step(20));
+  const url = await page.evaluate(() => window.apelsin.screenshot());
+  return page.evaluate(async (src) => {
+    const img = new Image();
+    img.src = src;
+    await img.decode();
+    const c = document.createElement('canvas');
+    c.width = img.width; c.height = img.height;
+    const ctx = c.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+    const y = Math.round(c.height / 2), row = ctx.getImageData(0, y - 1, c.width, 3).data;
+    const kind = (x) => {
+      const k = (c.width + x) * 4, R = row[k], G = row[k + 1], B = row[k + 2];
+      if (R > 215 && G > 200 && B > 140) return 'w';
+      if (R > 150 && R > G * 1.15 && B < R * 0.55) return 'o';
+      return '.';
+    };
+    let s = '';
+    for (let x = Math.round(c.width / 2); x < c.width; x += 2) s += kind(x);
+    return s.replace(/(.)\1+/g, '$1');
+  }, url);
+}
+
+test('a cut face shows the anatomy from the core out: white core, flesh, white pith, orange rind', async () => {
+  const page = await open('seed=5&preset=halves&debug', { width: 900, height: 900 });
+  for (const variety of ['navel', 'valencia', 'caracara']) {
+    const profile = await faceProfile(page, variety);
+    assert.match(profile, /^w\.?o[o.]*w\.?o/, `${variety} radial profile ${profile}`);
+    await page.evaluate(() => window.apelsin.preset('halves'));
+  }
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
+
+test('the stem end carries an olive calyx button with a stem stub', async () => {
+  const page = await open('seed=6&debug', { width: 800, height: 800 });
+  await page.evaluate(async () => {
+    const { quat } = await import('./src/math.js');
+    const { restToWorld } = await import('./src/orange/piece.js');
+    const { world } = window.apelsin.internals;
+    const piece = world.pieces[0];
+    world.place(piece, [0, 0, 0], quat.identity(), { sleep: true });
+    window.apelsin.step(2);
+    window.apelsin.camera({ target: restToWorld(piece, [0, world.params.c, 0]), yaw: 0, pitch: 1.5, distance: 0.12, fov: (25 * Math.PI) / 180 });
+  });
+  const px = await pixels(page, 20);
+  const geometry = await page.evaluate(() => {
+    const { world } = window.apelsin.internals;
+    const d = world.pieces[0].geometry.data;
+    let top = 0;
+    for (let i = 1; i < d.length; i += 7) top = Math.max(top, d[i]);
+    return { top, c: world.params.c };
+  });
+  const calyx = await page.evaluate(async () => {
+    const url = window.apelsin.screenshot();
+    const img = new Image();
+    img.src = url;
+    await img.decode();
+    const c = document.createElement('canvas');
+    c.width = img.width; c.height = img.height;
+    const ctx = c.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+    const { data } = ctx.getImageData(0, 0, c.width, c.height);
+    let olive = 0;
+    for (let k = 0; k < data.length; k += 4) if (data[k] < 190 && data[k + 1] > data[k] * 0.8 && data[k + 1] > data[k + 2] * 1.4) olive++;
+    return { olive: olive / (data.length / 4) };
+  });
+  assert.ok(px.all.orange > 0.3, 'the rind fills the view');
+  assert.ok(calyx.olive > 0.002, `an olive calyx is visible ${JSON.stringify(calyx)}`);
+  assert.ok(geometry.top > geometry.c + 0.0005, `the stem stub stands proud of the rind ${JSON.stringify(geometry)}`);
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
