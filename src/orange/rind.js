@@ -159,8 +159,9 @@ float calyxHeight(vec3 d, float poleR, out float sep, out float stub, out float 
   vec2 P = vec2(cos(psi), sin(psi)) * rho - uStem.xy;
   stub = smoothstep(uCalyx.z * 1.02, uCalyx.z * 0.96, length(P));
   vein = (1.0 - smoothstep(0.0, 0.12, abs(x))) * smoothstep(uCalyx.z * 1.2, uCalyx.x * 0.9, rho);
-  float wr = sin(x * 9.0 + rho * 4000.0 * 0.3) * 0.5 + 0.5;
-  return sep * (0.000012 * wr - 0.00002 * vein) * (1.0 - stub);
+  vec3 wq = vec3(cos(psi), sin(psi), 0.0) * rho * 1000.0;
+  float wr = vnoise(wq / 0.35 + 5.0) * 0.6 + vnoise(wq / 0.12 + 9.0) * 0.4;
+  return sep * (0.00005 * wr - 0.00003 * vein) * (1.0 - stub);
 }
 float extraHeight(vec3 d, float poleR, out float sep, out float stub, out float vein, out float hole, out float crease, out float furrow) {
   float h = 0.0;
@@ -171,22 +172,22 @@ float extraHeight(vec3 d, float poleR, out float sep, out float stub, out float 
   if (rho < 0.018) {
     float rc = uCalyx.x;
     h += calyxHeight(d, poleR, sep, stub, vein);
-    float fade = smoothstep(rc * 1.0, rc * 1.5, rho) * (1.0 - smoothstep(rc * 2.0, 0.016, rho));
-    float fp = psi * uStem.w + 1.8 * vnoise(vec3(rho * 300.0, psi * 1.3, uSeed.x * 10.0));
-    furrow = pow(0.5 + 0.5 * cos(fp), 3.0) * fade;
-    h -= 0.00009 * furrow;
+    float fade = smoothstep(rc * 0.95, rc * 1.25, rho) * (1.0 - smoothstep(rc * 1.6, 0.015, rho));
+    float fp = psi * uStem.w + 2.2 * vnoise(vec3(rho * 250.0, psi * 1.3, uSeed.x * 10.0)) + 0.8 * vnoise(vec3(rho * 900.0, psi * 4.0, 3.0));
+    furrow = pow(0.5 + 0.5 * cos(fp), 2.5) * fade * (0.4 + 0.6 * vnoise(vec3(psi * 2.0, rho * 120.0, 9.0)));
+    h -= 0.0004 * furrow;
   }
   float tn = 3.14159265 - th;
   if (uNavel.x > 0.0 && tn < uNavel.x * 3.5) {
     float open = uNavel.x;
     hole = 1.0 - smoothstep(open * 0.7, open * 0.95, tn);
-    float folds = smoothstep(open * 0.85, open * 1.3, tn) * (1.0 - smoothstep(open * 1.6, open * 3.3, tn));
-    float fp = psi * uNavel.z + 2.2 * vnoise(vec3(tn * 60.0, psi * 1.5, uSeed.y * 10.0));
-    h += 0.00011 * folds * (0.5 + 0.5 * cos(fp)) * (0.6 + 0.4 * vnoise(vec3(psi * 4.0, tn * 30.0, 5.0)));
-    vec3 cq = vec3(psi * 3.0, tn / max(open, 1e-3) * 4.0, uSeed.z * 7.0);
-    float cr = vnoise(cq) * 0.6 + vnoise(cq * 2.7 + 3.0) * 0.4;
-    crease = smoothstep(0.35, 0.05, abs(cr - 0.5)) * hole;
-    h += hole * (0.0003 * cr - 0.00025 * crease);
+    float folds = smoothstep(open * 0.8, open * 1.05, tn) * (1.0 - smoothstep(open * 1.3, open * 2.6, tn));
+    float fp = psi * uNavel.z + 2.4 * vnoise(vec3(tn * 60.0, psi * 1.5, uSeed.y * 10.0));
+    h -= 0.00026 * folds * pow(0.5 + 0.5 * cos(fp), 4.0) * (0.5 + 0.5 * vnoise(vec3(psi * 4.0, tn * 30.0, 5.0)));
+    vec3 cq = vec3(psi * 2.5, tn / max(open, 1e-3) * 3.0, uSeed.z * 7.0);
+    float cr = vnoise(cq) * 0.55 + vnoise(cq * 2.3 + 3.0) * 0.3 + vnoise(cq * 6.0 + 1.0) * 0.15;
+    crease = smoothstep(0.12, 0.02, abs(cr - 0.5)) * hole;
+    h += hole * (0.0005 * cr - 0.0003 * crease);
   }
   return h;
 }
@@ -268,26 +269,39 @@ void main() {
   rough += 0.12 * (1.0 - smoothstep(0.6, 1.0, sm)) * (0.4 + 0.6 * ridges);
   if (sep > 0.0) {
     float nz = vnoise(q / 0.25) * 0.5 + vnoise(q / 0.08) * 0.5;
-    vec3 olive = mix(vec3(0.075, 0.085, 0.012), vec3(0.13, 0.13, 0.02), nz);
-    olive = mix(olive, vec3(0.16, 0.16, 0.035), vein * 0.5);
-    float edge = smoothstep(0.08, 0.5, envelopeRelief(d) * 1000.0 - 0.1 * stub);
-    olive = mix(vec3(0.11, 0.075, 0.025), olive, mix(1.0, edge, uStem.z));
-    float brown = smoothstep(0.55, 1.0, rho / uCalyx.x) * uStem.z;
-    olive = mix(olive, vec3(0.15, 0.085, 0.025) * (0.8 + 0.4 * nz), brown);
+    float blot = vnoise(q / 0.9 + 4.0);
+    vec3 olive = mix(vec3(0.05, 0.058, 0.01), vec3(0.1, 0.105, 0.02), nz * 0.6 + blot * 0.4);
+    olive = mix(olive, vec3(0.12, 0.12, 0.028), vein * 0.35);
+    float edge = smoothstep(0.1, 0.45, envelopeRelief(d) * 1000.0);
+    olive = mix(vec3(0.07, 0.05, 0.018), olive, mix(1.0, edge, 0.4 + 0.6 * uStem.z));
+    float brown = smoothstep(0.6, 1.0, rho / uCalyx.x) * uStem.z;
+    olive = mix(olive, vec3(0.11, 0.07, 0.025) * (0.8 + 0.4 * nz), brown * 0.8);
     float rs = length(vec2(cos(atan(d.z, d.x)), sin(atan(d.z, d.x))) * rho - uStem.xy) / uCalyx.z;
-    vec3 cut = mix(vec3(0.23, 0.22, 0.03), vec3(0.42, 0.40, 0.12), smoothstep(0.25, 0.45, rs) * (1.0 - smoothstep(0.55, 0.75, rs)));
-    cut = mix(cut, vec3(0.5, 0.47, 0.25), 1.0 - smoothstep(0.08, 0.18, rs));
-    cut = mix(cut, cut * 0.7, smoothstep(0.82, 0.98, rs));
+    float ring = vnoise(vec3(rs * 14.0, atan(d.z, d.x) * 2.0, 1.0));
+    vec3 cut = mix(vec3(0.07, 0.08, 0.015), vec3(0.2, 0.2, 0.06), smoothstep(0.55, 0.8, 1.0 - rs));
+    cut = mix(cut, vec3(0.3, 0.29, 0.13), smoothstep(0.55, 0.85, 1.0 - rs) * (0.6 + 0.4 * ring));
+    cut = mix(cut, vec3(0.38, 0.35, 0.2), (1.0 - smoothstep(0.12, 0.3, rs)) * (0.5 + 0.5 * nz));
     cut *= 0.85 + 0.3 * nz;
     olive = mix(olive, cut, stub);
     col = mix(col, olive, sep);
     rough = mix(rough, mix(0.55, 0.62, stub), sep);
   }
   col = mix(col, col * 0.55, furrow * 0.25);
+  if (rho < 0.012) {
+    float rel = envelopeRelief(d) * 1000.0;
+    float lift0, w0, a0;
+    float xs = sepalAngle(atan(d.z, d.x), lift0, w0, a0);
+    float outl = uCalyx.y * 0.9 + (a0 - uCalyx.y * 0.9) * pow(max(0.0, 1.0 - abs(xs)), 1.25);
+    float gap = (1.0 - smoothstep(0.0, 0.0009, rho - max(outl, uCalyx.y))) * (1.0 - sep);
+    col = mix(col, col * vec3(0.32, 0.22, 0.2), gap * 0.75);
+    rough = mix(rough, 0.6, gap);
+  }
   if (hole > 0.0) {
-    vec3 inner = mix(uBase * vec3(1.05, 1.35, 1.6), uBase * vec3(0.95, 0.75, 0.6), crease);
-    col = mix(col, inner * (0.9 + 0.2 * vnoise(q / 0.3)), hole);
-    rough = mix(rough, 0.5, hole);
+    float lip = smoothstep(uNavel.x * 0.55, uNavel.x * 0.9, 3.14159265 - th);
+    vec3 inner = mix(uBase * vec3(1.02, 1.25, 1.4), uBase * vec3(0.55, 0.4, 0.3), crease);
+    inner = mix(inner, uBase * vec3(0.8, 0.7, 0.6), lip * 0.5);
+    col = mix(col, inner * (0.85 + 0.3 * vnoise(q / 0.4)), hole);
+    rough = mix(rough, mix(0.38, 0.6, crease), hole);
   }
   float tn = 3.14159265 - th;
   if (uNavel.x <= 0.0) {
@@ -379,7 +393,7 @@ function rindUniforms(shape, p) {
   const tint = 0.92 + rnd() * 0.16;
   return {
     uSeed: [rnd(), rnd(), rnd(), rnd()],
-    uBase: [rind[0] * tint, rind[1] * (0.85 + rnd() * 0.35), rind[2]],
+    uBase: [rind[0] * tint, rind[1] * (1.05 + rnd() * 0.35), rind[2]],
     uStemCol: [...(p.rindStem || [0.591, 0.06, 0]), 0.35 + rnd() * 0.35],
     uPal: [0.12 + rnd() * 0.25, 0.08 + rnd() * 0.22, 0.06 + rnd() * 0.08, rnd() < 0.3 ? rnd() * 0.25 : 0],
     uUndul: [0.00009 + rnd() * 0.00008, 0.00005 + rnd() * 0.00004, 0.000015 + rnd() * 0.000015, 0.06 + rnd() * 0.03],

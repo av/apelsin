@@ -160,8 +160,8 @@ export function createShape(seed = 1, opts = {}) {
   const sepals = rnd() < 0.85 ? 5 : rnd() < 0.5 ? 4 : 6;
   const calyxR = o.calyx * (0.85 + 0.35 * rnd()), phase0 = rnd() * Math.PI * 2;
   const calyx = {
-    radius: calyxR, inner: calyxR * (0.42 + 0.12 * rnd()), sepals: [],
-    stemR: 0.0012 + rnd() * 0.0006, stemH: 0.0006 + rnd() * 0.0028, stemTilt: [(rnd() - 0.5) * 0.25, (rnd() - 0.5) * 0.25], stemCut: [(rnd() - 0.5) * 0.5, (rnd() - 0.5) * 0.5],
+    radius: calyxR, inner: calyxR * (0.5 + 0.12 * rnd()), sepals: [],
+    stemR: 0.0013 + rnd() * 0.0006, stemH: 0.0003 + rnd() * 0.0016, stemTilt: [(rnd() - 0.5) * 0.25, (rnd() - 0.5) * 0.25], stemCut: [(rnd() - 0.5) * 0.5, (rnd() - 0.5) * 0.5],
     brown: rnd(),
   };
   for (let k = 0; k < sepals; k++) {
@@ -208,7 +208,7 @@ export function createShape(seed = 1, opts = {}) {
       let x = psi - sp.angle;
       x -= Math.PI * 2 * Math.round(x / (Math.PI * 2));
       const f = Math.max(0, 1 - Math.abs(x) / sp.width);
-      best = Math.max(best, calyx.inner * 0.9 + (sp.length - calyx.inner * 0.9) * Math.pow(f, 0.7));
+      best = Math.max(best, calyx.inner * 0.9 + (sp.length - calyx.inner * 0.9) * Math.pow(f, 1.25));
     }
     return best;
   };
@@ -230,8 +230,8 @@ export function createShape(seed = 1, opts = {}) {
     const psi = Math.atan2(d[2], d[0]);
     const X = rho * Math.cos(psi), Z = rho * Math.sin(psi);
     const rc = calyxOutline(psi), u = rho / rc;
-    const edge = smooth(rc + 0.00006, rc - 0.00008, rho);
-    const thick = 0.0001 + 0.0003 * Math.pow(Math.max(0, 1 - u), 0.55) + 0.00012 * Math.exp(-((rho / (calyx.stemR * 1.6)) ** 2));
+    const edge = smooth(rc + 0.00007, rc - 0.0001, rho);
+    const thick = 0.00014 + 0.00055 * Math.pow(Math.max(0, 1 - u * u), 0.8) + 0.00025 * Math.exp(-((rho / (calyx.stemR * 1.5)) ** 2));
     const lift = sepalLift(psi) * smooth(0.45, 1, u) ** 2;
     const cal = edge * (thick + lift);
     const [tx, tz] = calyx.stemTilt, [kx, kz] = calyx.stemCut;
@@ -239,7 +239,7 @@ export function createShape(seed = 1, opts = {}) {
     const rs = Math.hypot(X - ox, Z - oz), ps = Math.atan2(Z - oz, X - ox);
     const sr = calyx.stemR * (1 + 0.06 * Math.sin(ps * 2 + calyx.brown * 6) + 0.03 * Math.sin(ps * 5 + 1.3));
     const wall = smooth(sr + 0.00012, sr - 0.00012, rs);
-    const top = calyx.stemH + 0.00045 + (kx * (X - ox) + kz * (Z - oz)) * 0.35 - 0.00012 * Math.exp(-((rs / (sr * 0.45)) ** 2));
+    const top = calyx.stemH + 0.0008 + (kx * (X - ox) + kz * (Z - oz)) * 0.35 - 0.00012 * Math.exp(-((rs / (sr * 0.45)) ** 2));
     const flare = 0.00035 * Math.exp(-(((rs - sr) / 0.00045) ** 2)) * (rs > sr ? 1 : 0);
     return Math.max(cal + flare * edge, wall * top);
   }
