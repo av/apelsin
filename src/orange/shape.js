@@ -6,9 +6,22 @@ export const SHAPE_BIAS = 0.035;
 const L_MAX = 8;
 const SIGMA = [0, 0, 0.0095, 0.0045, 0.0055, 0.003, 0.0022, 0.0016, 0.0012];
 
+export const GLAND_SIZE = 512;
+export const RELIEF_SIZE = 256;
+export const RELIEF_EXT = 0.16;
+export const GLAND_RADIAL = 1.25;
+
 export const SHAPE_GLSL = `
 uniform samplerCube uShape;
+uniform samplerCube uGlands;
+uniform sampler2D uRelief;
 vec4 shapeAt(vec3 restDir) { return textureLod(uShape, restDir, 0.0) + vec4(${SHAPE_BIAS}, ${SHAPE_BIAS}, ${SHAPE_BIAS}, 0.0); }
+vec4 glandAt(vec3 restDir) { return textureLod(uGlands, restDir, 0.0); }
+float envelopeRelief(vec3 p) {
+  vec3 d = normalize(p);
+  if (d.y < ${Math.cos(Math.atan(RELIEF_EXT)).toFixed(6)}) return 0.0;
+  return textureLod(uRelief, d.xz / d.y * ${(0.5 / RELIEF_EXT).toFixed(6)} + 0.5, 0.0).r * 0.001;
+}
 `;
 
 const DEFAULTS = { a: 0.04, c: 0.0412, flavedo: 0.0013, pith: 0.0034, navel: 0.0016, navelOpen: 0.1, calyx: 0.0038 };
@@ -97,7 +110,7 @@ function glandPoints(shape, rnd) {
     const k = (ci(x) * G + ci(y)) * G + ci(z);
     next[n] = head[k]; head[k] = n; n++;
   };
-  const stemCut = Math.cos(shape.calyx * 1.15 / a), navelCut = -Math.cos(shape.navelOpen * 1.05);
+  const stemCut = Math.cos(shape.calyx.radius * 1.1 / a), navelCut = -Math.cos(shape.navelOpen * 1.05);
   for (let k = 0; k < tries; k++) {
     const i = order[k], x = cx[i * 3], y = cx[i * 3 + 1], z = cx[i * 3 + 2];
     if (y > stemCut || y < navelCut) continue;
@@ -144,6 +157,16 @@ export function createShape(seed = 1, opts = {}) {
   const base = norm3([Math.sin(baseTilt) * Math.cos(baseAz), -Math.cos(baseTilt), Math.sin(baseTilt) * Math.sin(baseAz)]);
   const flatK = 0.012 + rnd() * 0.008;
   const flavedo = o.flavedo * (0.88 + 0.24 * rnd()), pith = o.pith * (0.88 + 0.24 * rnd());
+  const sepals = rnd() < 0.85 ? 5 : rnd() < 0.5 ? 4 : 6;
+  const calyxR = o.calyx * (0.85 + 0.35 * rnd()), phase0 = rnd() * Math.PI * 2;
+  const calyx = {
+    radius: calyxR, inner: calyxR * (0.42 + 0.12 * rnd()), sepals: [],
+    stemR: 0.0012 + rnd() * 0.0006, stemH: 0.0006 + rnd() * 0.0028, stemTilt: [(rnd() - 0.5) * 0.25, (rnd() - 0.5) * 0.25], stemCut: [(rnd() - 0.5) * 0.5, (rnd() - 0.5) * 0.5],
+    brown: rnd(),
+  };
+  for (let k = 0; k < sepals; k++) {
+    calyx.sepals.push({ angle: phase0 + (k + (rnd() - 0.5) * 0.35) * (Math.PI * 2 / sepals), length: calyxR * (0.75 + 0.3 * rnd()), width: (Math.PI / sepals) * (0.75 + 0.35 * rnd()), lift: rnd() * rnd() * 0.0007, brown: rnd() });
+  }
 
   function sample(d) {
     const x = d[0], y = d[1], z = d[2];
@@ -179,10 +202,53 @@ export function createShape(seed = 1, opts = {}) {
     return [r, pulp, r - fl, peel];
   }
 
+  const calyxOutline = (psi) => {
+    let best = calyx.inner;
+    for (const sp of calyx.sepals) {
+      let x = psi - sp.angle;
+      x -= Math.PI * 2 * Math.round(x / (Math.PI * 2));
+      const f = Math.max(0, 1 - Math.abs(x) / sp.width);
+      best = Math.max(best, calyx.inner * 0.9 + (sp.length - calyx.inner * 0.9) * Math.pow(f, 0.7));
+    }
+    return best;
+  };
+  const sepalLift = (psi) => {
+    let best = 0;
+    for (const sp of calyx.sepals) {
+      let x = psi - sp.angle;
+      x -= Math.PI * 2 * Math.round(x / (Math.PI * 2));
+      best = Math.max(best, sp.lift * Math.max(0, 1 - Math.abs(x) / sp.width));
+    }
+    return best;
+  };
+  const poleR = sample([0, 1, 0])[0];
+  function relief(d) {
+    if (d[1] < RELIEF_COS) return 0;
+    const sxz = Math.hypot(d[0], d[2]);
+    const rho = Math.atan2(sxz, d[1]) * poleR;
+    if (rho > calyx.radius * 1.4) return 0;
+    const psi = Math.atan2(d[2], d[0]);
+    const X = rho * Math.cos(psi), Z = rho * Math.sin(psi);
+    const rc = calyxOutline(psi), u = rho / rc;
+    const edge = smooth(rc + 0.00006, rc - 0.00008, rho);
+    const thick = 0.0001 + 0.0003 * Math.pow(Math.max(0, 1 - u), 0.55) + 0.00012 * Math.exp(-((rho / (calyx.stemR * 1.6)) ** 2));
+    const lift = sepalLift(psi) * smooth(0.45, 1, u) ** 2;
+    const cal = edge * (thick + lift);
+    const [tx, tz] = calyx.stemTilt, [kx, kz] = calyx.stemCut;
+    const ox = tx * calyx.stemH * 0.6, oz = tz * calyx.stemH * 0.6;
+    const rs = Math.hypot(X - ox, Z - oz), ps = Math.atan2(Z - oz, X - ox);
+    const sr = calyx.stemR * (1 + 0.06 * Math.sin(ps * 2 + calyx.brown * 6) + 0.03 * Math.sin(ps * 5 + 1.3));
+    const wall = smooth(sr + 0.00012, sr - 0.00012, rs);
+    const top = calyx.stemH + 0.00045 + (kx * (X - ox) + kz * (Z - oz)) * 0.35 - 0.00012 * Math.exp(-((rs / (sr * 0.45)) ** 2));
+    const flare = 0.00035 * Math.exp(-(((rs - sr) / 0.00045) ** 2)) * (rs > sr ? 1 : 0);
+    return Math.max(cal + flare * edge, wall * top);
+  }
   const shape = {
-    seed, a, c, axis, base, tilt: Math.acos(axis[1]), navelOpen, calyx: o.calyx, flavedoMean: flavedo, pithMean: pith,
+    seed, calyxOutline, sepalLift, a, c, axis, base, tilt: Math.acos(axis[1]), navelOpen, navelDepth, calyx, flavedoMean: flavedo, pithMean: pith, poleR,
     sample,
+    relief,
     radius: (d) => sample(d)[0],
+    envelope: (d) => sample(d)[0] + relief(d),
     pulpRadius: (d) => sample(d)[1],
     flavedo: (d) => { const s = sample(d); return s[0] - s[2]; },
     peel: (d) => sample(d)[3],
@@ -196,26 +262,97 @@ export function createShape(seed = 1, opts = {}) {
   pts.forEach(([d, r, small], i) => {
     const s = sample(d);
     const R = s[0];
-    glands.set([d[0] * R, d[1] * R, d[2] * R, r, Math.min(s[0] - s[2] - r * 0.9, r * (1.1 + 0.5 * rnd()) + 0.00005)], i * GLAND_STRIDE);
+    glands.set([d[0] * R, d[1] * R, d[2] * R, r, Math.min(s[0] - s[2] - r * GLAND_RADIAL, r * (1.1 + 0.5 * rnd()) + 0.00005)], i * GLAND_STRIDE);
     glandShape.set([1 + rnd() * 0.35, rnd() * Math.PI], i * 2);
   });
   shape.glands = glands;
   shape.glandShape = glandShape;
   shape.glandCount = pts.length;
+  let glandFaces = null;
+  shape.glandCube = (size = GLAND_SIZE) => glandFaces || (glandFaces = glandCubeData(glands, pts.length, size));
+  shape.glandAt = (d) => {
+    const faces = shape.glandCube();
+    const size = Math.round(Math.sqrt(faces[0].length / 4));
+    const [f, s0, t0] = cubeLookup(d);
+    const i = Math.min(size - 1, Math.max(0, Math.floor((s0 + 1) / 2 * size))), j = Math.min(size - 1, Math.max(0, Math.floor((t0 + 1) / 2 * size)));
+    return Array.from(faces[f].subarray((j * size + i) * 4, (j * size + i) * 4 + 4));
+  };
   const baked = new WeakMap();
   shape.bake = (gl) => {
     if (baked.has(gl)) return baked.get(gl);
-    const out = bakeShapeCube(gl, sample);
+    const cube = bakeShapeCube(gl, sample);
+    const glandTex = uploadCube(gl, shape.glandCube(), gl.RGBA32F, gl.FLOAT, gl.NEAREST);
+    const reliefTex = bakeRelief(gl, relief);
+    const out = { ...cube, shape: cube.texture, glands: glandTex, relief: reliefTex, uniforms: { uShape: cube.texture, uGlands: glandTex, uRelief: reliefTex } };
     baked.set(gl, out);
     return out;
   };
   return shape;
 }
 
+const RELIEF_COS = Math.cos(Math.atan(RELIEF_EXT));
+
 export const CUBE_FACES = [
   (s, t) => [1, -t, -s], (s, t) => [-1, -t, s], (s, t) => [s, 1, t],
   (s, t) => [s, -1, -t], (s, t) => [s, -t, 1], (s, t) => [-s, -t, -1],
 ];
+
+const FACE_ST = [
+  (x, y, z) => [-z / x, -y / x, x], (x, y, z) => [z / -x, -y / -x, -x], (x, y, z) => [x / y, z / y, y],
+  (x, y, z) => [x / -y, -z / -y, -y], (x, y, z) => [x / z, -y / z, z], (x, y, z) => [-x / -z, -y / -z, -z],
+];
+
+export function cubeLookup(d) {
+  const ax = Math.abs(d[0]), ay = Math.abs(d[1]), az = Math.abs(d[2]);
+  const f = ax >= ay && ax >= az ? (d[0] > 0 ? 0 : 1) : ay >= az ? (d[1] > 0 ? 2 : 3) : (d[2] > 0 ? 4 : 5);
+  const [s, t] = FACE_ST[f](d[0], d[1], d[2]);
+  return [f, s, t];
+}
+
+const FACE_M = CUBE_FACES.map((F) => {
+  const o = F(0, 0), ds = F(1, 0), dt = F(0, 1);
+  return [ds[0] - o[0], dt[0] - o[0], o[0], ds[1] - o[1], dt[1] - o[1], o[1], ds[2] - o[2], dt[2] - o[2], o[2]];
+});
+
+function glandCubeData(glands, count, size) {
+  const faces = [], best = [];
+  for (let f = 0; f < 6; f++) { faces.push(new Float32Array(size * size * 4)); best.push(new Float32Array(size * size).fill(Infinity)); }
+  const reach = 0.0016, h = 2 / size;
+  for (let g = 0; g < count; g++) {
+    const k = g * GLAND_STRIDE;
+    const sx = glands[k], sy = glands[k + 1], sz = glands[k + 2], r = glands[k + 3], depth = glands[k + 4];
+    const R = Math.hypot(sx, sy, sz), ux = sx / R, uy = sy / R, uz = sz / R;
+    const cs = 1 - depth / R, cx = sx * cs, cy = sy * cs, cz = sz * cs;
+    const ang = reach / R, lim = ang * ang;
+    for (let f = 0; f < 6; f++) {
+      const [s, t, m] = FACE_ST[f](ux, uy, uz);
+      if (m < 0.55) continue;
+      const q = 1 + s * s + t * t;
+      const ws = Math.ceil(ang * q / Math.sqrt(1 + t * t) / h) + 1, wt = Math.ceil(ang * q / Math.sqrt(1 + s * s) / h) + 1;
+      const ci = Math.floor((s + 1) / h), cj = Math.floor((t + 1) / h);
+      const i0 = Math.max(0, ci - ws), i1 = Math.min(size - 1, ci + ws), j0 = Math.max(0, cj - wt), j1 = Math.min(size - 1, cj + wt);
+      if (i0 > i1 || j0 > j1) continue;
+      const M = FACE_M[f], data = faces[f], bf = best[f];
+      for (let j = j0; j <= j1; j++) {
+        const tt = (j + 0.5) * h - 1;
+        const bx = M[1] * tt + M[2], by = M[4] * tt + M[5], bz = M[7] * tt + M[8];
+        for (let i = i0; i <= i1; i++) {
+          const ss = (i + 0.5) * h - 1;
+          const vx = M[0] * ss + bx, vy = M[3] * ss + by, vz = M[6] * ss + bz;
+          const il = 1 / Math.sqrt(vx * vx + vy * vy + vz * vz);
+          const dx = vx * il - ux, dy = vy * il - uy, dz = vz * il - uz;
+          const d2 = dx * dx + dy * dy + dz * dz;
+          const idx = j * size + i;
+          if (d2 > lim || d2 >= bf[idx]) continue;
+          bf[idx] = d2;
+          const o = idx * 4;
+          data[o] = cx; data[o + 1] = cy; data[o + 2] = cz; data[o + 3] = r;
+        }
+      }
+    }
+  }
+  return faces;
+}
 
 export function shapeCubeData(sample, size = SHAPE_SIZE) {
   const faces = [];
@@ -231,14 +368,40 @@ export function shapeCubeData(sample, size = SHAPE_SIZE) {
   return faces;
 }
 
-function bakeShapeCube(gl, sample, size = SHAPE_SIZE) {
-  const faces = shapeCubeData(sample, size);
+function uploadCube(gl, faces, internal, type, filter) {
+  const size = Math.round(Math.sqrt(faces[0].length / 4));
   const tex = gl.createTexture();
   gl.bindTexture(gl.TEXTURE_CUBE_MAP, tex);
-  gl.texStorage2D(gl.TEXTURE_CUBE_MAP, 1, gl.RGBA16F, size, size);
-  for (let f = 0; f < 6; f++) gl.texSubImage2D(gl.TEXTURE_CUBE_MAP_POSITIVE_X + f, 0, 0, 0, size, size, gl.RGBA, gl.FLOAT, faces[f]);
-  gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texStorage2D(gl.TEXTURE_CUBE_MAP, 1, internal, size, size);
+  for (let f = 0; f < 6; f++) gl.texSubImage2D(gl.TEXTURE_CUBE_MAP_POSITIVE_X + f, 0, 0, 0, size, size, gl.RGBA, type, faces[f]);
+  gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MIN_FILTER, filter);
+  gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MAG_FILTER, filter);
   for (const p of [gl.TEXTURE_WRAP_S, gl.TEXTURE_WRAP_T, gl.TEXTURE_WRAP_R]) gl.texParameteri(gl.TEXTURE_CUBE_MAP, p, gl.CLAMP_TO_EDGE);
-  return { cube: tex, texture: { tex, cube: true, size }, size };
+  return { tex, cube: true, size };
+}
+
+function bakeShapeCube(gl, sample, size = SHAPE_SIZE) {
+  const texture = uploadCube(gl, shapeCubeData(sample, size), gl.RGBA16F, gl.FLOAT, gl.LINEAR);
+  return { cube: texture.tex, texture, size };
+}
+
+export function reliefData(relief, size = RELIEF_SIZE) {
+  const data = new Float32Array(size * size);
+  for (let j = 0; j < size; j++) for (let i = 0; i < size; i++) {
+    const X = (((i + 0.5) / size) * 2 - 1) * RELIEF_EXT, Z = (((j + 0.5) / size) * 2 - 1) * RELIEF_EXT;
+    data[j * size + i] = relief(norm3([X, 1, Z])) * 1000;
+  }
+  return data;
+}
+
+function bakeRelief(gl, relief, size = RELIEF_SIZE) {
+  const tex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texStorage2D(gl.TEXTURE_2D, 1, gl.R16F, size, size);
+  gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, size, size, gl.RED, gl.FLOAT, reliefData(relief, size));
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  return { tex, width: size, height: size };
 }
