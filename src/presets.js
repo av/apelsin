@@ -1,5 +1,4 @@
 import { quat, v3 } from './math.js';
-import { restToWorld, restDirToWorld } from './orange/piece.js';
 
 export const PRESET_NAMES = ['whole', 'halves', 'wedges', 'wheels', 'reference'];
 
@@ -13,13 +12,19 @@ function capWithNormal(piece, restNormal) {
   return piece.caps.reduce((best, c) => (v3.dot(c.normal, restNormal) > (best ? v3.dot(best.normal, restNormal) : -2) ? c : best), null);
 }
 
-function faceToward(piece, capNormal, dir, spin = 0) {
-  const q = quat.fromTo(capNormal, dir);
-  return quat.mul(quat.axisAngle(dir, spin), q);
+function onPlane(world, x, z) { return [x, world.floorAt(x, z), z]; }
+
+function axialCuts(app, origin, angles, opts = {}) {
+  for (const a of angles) app.world.cut(origin, [Math.cos(a), 0, Math.sin(a)], null, { impulse: 0, sound: false, juiceAmount: 0, ...opts });
 }
 
-function axialCuts(app, origin, angles) {
-  for (const a of angles) app.world.cut(origin, [Math.cos(a), 0, Math.sin(a)], null, { impulse: 0, sound: false, juiceAmount: 0.25 });
+function frame(app, view) {
+  const b = app.world.bounds();
+  app.camera.set({ ...app.scene.camera, ...view, target: [b.centre[0], view.height ?? 0.01, b.centre[2]], fov: 25 * deg });
+}
+
+function dripFromCaps(app, pieces, seconds) {
+  for (const p of pieces) for (const c of p.caps) app.juice.fresh(p, c, seconds);
 }
 
 const LAYOUTS = {
@@ -29,73 +34,78 @@ const LAYOUTS = {
 
   halves(app) {
     const o = app.world.originWorld();
-    app.world.cut(o, [0, 1, 0], null, { impulse: 0, juiceAmount: 0.4 });
+    app.world.cut(o, [0, 1, 0], null, { impulse: 0, juiceAmount: 0 });
     const yaw = app.scene.camera.yaw;
     const { right, toCamera } = cameraFrame(yaw);
     const pieces = app.world.pieces.slice().sort((a, b) => b.com[1] - a.com[1]);
     pieces.forEach((p, i) => {
-      const cap = p.caps[0];
       const side = i === 0 ? -1 : 1;
-      const dir = v3.norm(v3.add(v3.add(v3.scale(toCamera, Math.cos(38 * deg)), [0, Math.sin(38 * deg), 0]), v3.scale(right, -side * 0.18)));
-      const rot = faceToward(p, cap.normal, dir, side * 0.4);
-      const pos = v3.add(v3.scale(right, side * 0.047), v3.scale(toCamera, i === 0 ? -0.012 : 0.012));
-      app.world.place(p, pos, rot, { sleep: true });
+      const up = quat.fromTo(p.caps[0].normal, [0, 1, 0]);
+      const rot = quat.mul(quat.axisAngle([0, 1, 0], side * 0.7 + 0.3), up);
+      const at = v3.add(v3.scale(right, side * 0.046), v3.scale(toCamera, i === 0 ? -0.018 : 0.014));
+      app.world.place(p, onPlane(app.world, at[0], at[2]), rot, { drop: 0.001 });
     });
-    app.camera.set({ ...app.scene.camera, pitch: 0.36, distance: 0.46, target: [0, 0.03, 0], fov: 25 * deg });
+    app.settle();
+    frame(app, { pitch: 0.62, distance: 0.42, height: 0.018 });
   },
 
   wedges(app) {
     const o = app.world.originWorld();
-    axialCuts(app, o, [0, 45 * deg, 90 * deg, 135 * deg]);
+    app.world.cut(o, [1, 0, 0], null, { impulse: 0, juiceAmount: 0 });
+    axialCuts(app, o, [45 * deg, 90 * deg, 135 * deg]);
     const yaw = app.scene.camera.yaw;
     const { right, toCamera } = cameraFrame(yaw);
     const pieces = app.world.pieces.slice().sort((a, b) => Math.atan2(a.com[2], a.com[0]) - Math.atan2(b.com[2], b.com[0]));
+    const slots = [[-1, -1], [0, -1], [1, -1], [-1.5, 0], [-0.5, 0], [0.5, 0], [-1, 1], [0, 1]];
     pieces.forEach((p, i) => {
-      const bis = v3.norm([p.com[0], 0, p.com[2]]);
-      const down = quat.fromTo(bis, [0, -1, 0]);
-      const axisNow = quat.rotate(down, [0, 1, 0]);
-      const fan = (i - 3.5) * 13 * deg;
-      const along = quat.rotate(quat.axisAngle([0, 1, 0], yaw + fan), [1, 0, 0]);
-      const align = quat.fromTo([axisNow[0], 0, axisNow[2]], along);
-      const rot = quat.mul(align, down);
-      const ring = 0.1;
-      const ang = (i - 3.5) * 15 * deg;
-      const pos = v3.add(v3.scale(right, Math.sin(ang) * ring * 1.15), v3.scale(toCamera, (Math.cos(ang) - 1) * ring + (i % 2 ? 0.018 : -0.018)));
-      app.world.place(p, pos, rot, { drop: 0.002 });
+      const [col, row] = slots[i];
+      const big = p.caps.slice().sort((a, b) => b.area - a.area);
+      const [lie, show] = i % 2 ? [big[0], big[1]] : [big[1], big[0]];
+      const down = quat.fromTo(lie.normal, [0, -1, 0]);
+      const up = quat.rotate(down, show.normal);
+      const face = quat.rotate(quat.axisAngle([0, 1, 0], ((i * 37) % 11 - 5) * 3 * deg), toCamera);
+      const rot = quat.mul(quat.fromTo([up[0], 0, up[2]], face), down);
+      const at = v3.add(v3.scale(right, (col + 0.18) * 0.09 + ((i * 53) % 7 - 3) * 0.002), v3.scale(toCamera, row * 0.064));
+      app.world.place(p, onPlane(app.world, at[0], at[2]), rot, { drop: 0.0015 });
     });
-    app.camera.set({ ...app.scene.camera, pitch: 0.42, distance: 0.5, target: [0, 0.01, -0.025], fov: 25 * deg });
+    app.settle();
+    dripFromCaps(app, app.world.pieces, 6);
+    frame(app, { pitch: 0.62, distance: 0.6, height: 0.004 });
   },
 
   wheels(app) {
     const o = app.world.originWorld();
     const c = app.world.params.c;
-    for (const h of [-0.55, -0.22, 0.11, 0.44]) app.world.cut(v3.add(o, [0, h * c, 0]), [0, 1, 0], null, { impulse: 0, sound: h === -0.55, juiceAmount: 0.25 });
+    const heights = [-0.4, -0.13, 0.13, 0.4];
+    heights.forEach((h, k) => app.world.cut(v3.add(o, [0, h * c, 0]), [0, 1, 0], null, { impulse: 0, sound: k === 0, juiceAmount: 0 }));
     const yaw = app.scene.camera.yaw;
     const { right, toCamera } = cameraFrame(yaw);
     const pieces = app.world.pieces.slice().sort((a, b) => a.com[1] - b.com[1]);
     const ends = [pieces[0], pieces[pieces.length - 1]];
     const wheels = pieces.slice(1, -1);
+    const step = app.world.params.a * 1.7;
     wheels.forEach((p, i) => {
-      const tilt = quat.axisAngle(toCamera, -10 * deg);
-      const rot = quat.mul(tilt, quat.axisAngle([0, 1, 0], i * 0.9));
-      const pos = v3.add(v3.scale(right, (i - (wheels.length - 1) / 2) * 0.042), v3.scale(toCamera, 0.01 - i * 0.004));
-      pos[1] = i * 0.007;
-      app.world.place(p, pos, rot, { drop: 0.004 + i * 0.006 });
+      const s = i - (wheels.length - 1) / 2;
+      const rot = quat.mul(quat.axisAngle(right, 0), quat.axisAngle([0, 1, 0], i * 1.3));
+      const at = v3.add(v3.scale(right, s * step), v3.scale(toCamera, 0.006 - Math.abs(s) * 0.014));
+      app.world.place(p, onPlane(app.world, at[0], at[2]), rot, { drop: 0.0008 + i * 0.012 });
     });
     ends.forEach((p, i) => {
       const cap = p.caps[0];
-      const rot = faceToward(p, cap.normal, v3.norm(v3.add(v3.scale(toCamera, 0.5), [0, 0.85, 0])), i);
-      const pos = v3.add(v3.scale(right, i ? 0.075 : -0.07), v3.scale(toCamera, -0.075));
-      app.world.place(p, pos, rot, { sleep: true });
+      const rot = quat.mul(quat.axisAngle([0, 1, 0], i * 2.1), quat.fromTo(cap.normal, [0, 1, 0]));
+      const at = v3.add(v3.scale(right, (i ? 1 : -1) * step * 0.95), v3.scale(toCamera, -0.075));
+      app.world.place(p, onPlane(app.world, at[0], at[2]), rot, { drop: 0.0008 });
     });
-    app.camera.set({ ...app.scene.camera, pitch: 0.5, distance: 0.52, target: [0, 0.01, -0.02], fov: 25 * deg });
+    app.settle(4);
+    dripFromCaps(app, wheels, 5);
+    frame(app, { pitch: 0.7, distance: 0.46, height: 0.008 });
   },
 
   reference(app) {
     const o = app.world.originWorld();
     const c = app.world.params.c;
-    app.world.cut(v3.add(o, [0, 0.03 * c, 0]), [0, 1, 0], null, { impulse: 0 });
-    app.world.cut(v3.add(o, [0, -0.66 * c, 0]), [0, 1, 0], null, { impulse: 0, sound: false });
+    app.world.cut(v3.add(o, [0, 0.03 * c, 0]), [0, 1, 0], null, { impulse: 0, juiceAmount: 0 });
+    app.world.cut(v3.add(o, [0, -0.66 * c, 0]), [0, 1, 0], null, { impulse: 0, sound: false, juiceAmount: 0 });
     const disc = app.world.pieces.find((p) => p.caps.length === 2);
     for (const p of app.world.pieces.slice()) if (p !== disc) app.world.remove(p);
     axialCuts(app, o, [0, 90 * deg]);
@@ -114,8 +124,9 @@ const LAYOUTS = {
       const target = quat.rotate(quat.axisAngle([0, 1, 0], layout[i].yaw), [0, 0, 1]);
       const turn = quat.fromTo([faceNow[0], 0, faceNow[2]], target);
       const rot = quat.mul(turn, down);
-      app.world.place(p, layout[i].pos, rot, { drop: 0.001 });
+      app.world.place(p, layout[i].pos, rot, { drop: 0.0005 });
     });
+    app.settle();
     app.juice.clear();
     app.camera.set({ target: [0.003, 0.02, -0.008], yaw: 0, pitch: 12 * deg, distance: 0.25, fov: 18 * deg });
   },

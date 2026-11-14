@@ -46,7 +46,7 @@ function boot() {
   const audio = createAudio();
   const juice = createJuice(gl, rng);
   const world = createWorld(gl, { juice, audio });
-  juice.on('splat', () => audio.drip());
+  juice.on('splat', (speed, r) => audio.drip(speed, r, app.surfaceAt()));
 
   const app = {
     state, world, camera, juice, audio, renderer, physics: null,
@@ -67,9 +67,27 @@ function boot() {
       ui?.sync();
       return true;
     },
+    surfaceAt(x = 0, z = 0) {
+      if (state.scene === 'kitchen') return world.floorAt(x, z) >= -0.001 ? 'wood' : 'stone';
+      return state.scene === 'dark' ? 'slate' : 'paper';
+    },
+    applyJuiceTint() {
+      const tint = juice.setVariety(state.variety);
+      for (const name of ['cove', 'board', 'counter', 'slate']) {
+        const prog = renderer.materialProgram(name);
+        gl.useProgram(prog.handle);
+        if (prog.uniforms.uJuiceTint) gl.uniform3fv(prog.uniforms.uJuiceTint, tint);
+      }
+    },
+    settle(seconds = 3) {
+      if (app.physics) app.physics.settle(world.pieces, seconds);
+      else app.pendingSettle = true;
+      for (const p of world.pieces) { p.hasPrev = false; }
+    },
     setVariety(name) {
       if (!VARIETY_NAMES.includes(name)) return false;
       state.variety = name;
+      app.applyJuiceTint();
       app.runPreset(state.preset);
       return true;
     },
@@ -99,11 +117,11 @@ function boot() {
       ui?.sync();
       return true;
     },
-    toggle(key) { state[key] = !state[key]; ui?.sync(); },
+    toggle(key) { state[key] = !state[key]; if (key === 'slowmo') audio.setRate(state.slowmo ? 0.6 : 1); ui?.sync(); },
     reset() { app.runPreset('whole'); camera.set({ ...app.scene.camera, fov: 25 * Math.PI / 180 }); },
     cutWith(origin, normal, pieces) {
       const n = world.cut(origin, normal, pieces);
-      if (n) { ui?.hideHint(); state.preset = null; ui?.sync(); }
+      if (n) { ui?.sliced(); state.preset = null; ui?.sync(); app.followUntil = time + 1.6; }
       return n;
     },
     download() {
@@ -115,8 +133,11 @@ function boot() {
     },
   };
 
-  const tools = createTools(canvas, overlay, app);
-  const ui = createUI(app);
+  const tools = createTools(canvas, overlay, app, gl);
+  app.tools = tools;
+  world.surfaceAt = () => app.surfaceAt();
+  app.applyJuiceTint();
+  const ui = createUI(app, { test: TEST });
   app.setScene(state.scene);
   app.newOrange(state.seed);
   if (params.has('preset')) app.runPreset(pick('preset', PRESET_NAMES, 'whole'));
@@ -128,11 +149,16 @@ function boot() {
     time += dt;
     tools.update(sim);
     world.update(sim);
+    if (app.followUntil > time && world.pieces.length && !tools.busy) {
+      const c = world.bounds().centre, g = camera.goal.target, k = Math.min(1, dt * 1.8);
+      camera.goal.target = [g[0] + (c[0] - g[0]) * k, g[1], g[2] + (c[2] - g[2]) * k];
+    }
     juice.update(sim, world.pieces, world.params, world.floorAt);
     juice.prepare(sim);
+    audio.rolling(world.pieces.reduce((s, p) => s + (p.contact === 'ground' && p.body && !p.body.isSleeping() ? p.rolling || 0 : 0), 0), app.surfaceAt());
     const b = world.bounds();
     renderer.render({
-      camera, dt, time, drawables: world.drawables(),
+      camera, dt, time, drawables: [...world.drawables(), ...tools.drawables()],
       transparent: juice.count ? [(ctx) => juice.draw(ctx)] : [],
       macro: state.macro, focus: v3.len(v3.sub(b.centre, camera.eye)),
       wetness: juice.wetness, wetExtent: juice.extent, wetSize: juice.size,
@@ -159,9 +185,13 @@ function boot() {
   async function loadPhysics() {
     const { createPhysics } = await import('./physics.js');
     const physics = await createPhysics();
-    physics.on('impact', (piece, impulse) => audio.thud(impulse));
+    physics.on('impact', (piece, impulse, other) => {
+      const m = piece.body ? piece.body.mass() : 0.1;
+      audio.thud(impulse / Math.max(m, 0.005), other === 'piece' ? 'fruit' : app.surfaceAt(piece.position[0], piece.position[2]), m);
+    });
     app.physics = physics;
     world.attachPhysics(physics, app.scene.colliders);
+    if (app.pendingSettle) { app.pendingSettle = false; physics.settle(world.pieces, 3); }
     state.physicsReady = true;
     if (TEST) frame(1 / 60);
     resolveReady();
@@ -194,7 +224,14 @@ function boot() {
       quality: state.quality, fps: Math.round(1000 / emaMs), gpu: gl.caps.gpu, droplets: juice.count, physicsReady: state.physicsReady,
       tool: state.tool, preset: state.preset, awake: app.physics ? app.physics.awake(world.pieces) : 0, errors: gl.errors.slice(),
       width: renderer.width, height: renderer.height, floatTargets: gl.caps.floatTargets,
+      knife: tools.knifeVisible, splats: juice.stats.splats, drips: juice.stats.drips, slowmo: state.slowmo, macro: state.macro,
+      squash: world.pieces.reduce((m, p) => Math.max(m, p.squash), 0), muted: audio.muted,
     }),
+    poses: () => world.pieces.map((p) => ({ id: p.id, position: p.position.slice(), rotation: p.rotation.slice(), sleeping: p.body ? p.body.isSleeping() : null, caps: p.caps.length })),
+    project: (p) => camera.project(p, canvas.clientWidth, canvas.clientHeight),
+    contacts: () => world.contacts(),
+    wetness: () => juice.stats.area,
+    toggle: (key) => { if (!['slowmo', 'macro'].includes(key)) return false; app.toggle(key); return state[key]; },
     preset: (name) => app.runPreset(name),
     cut: (point, normal) => world.cut(point, normal),
     setScene: (name) => app.setScene(name),

@@ -36,25 +36,62 @@ void main() {
 
 const WETNESS = `
 uniform sampler2D uWetness;
+uniform vec3 uJuiceTint;
 vec2 wetUv(vec3 w) { return w.xz / (2.0 * uWetParams.x) + 0.5; }
+vec2 wetBicubic(vec2 uv) {
+  vec2 px = uv * uWetParams.z - 0.5;
+  vec2 f = fract(px), i = floor(px);
+  vec2 f2 = f * f, f3 = f2 * f;
+  vec2 w0 = (1.0 - 3.0 * f + 3.0 * f2 - f3) / 6.0, w1 = (4.0 - 6.0 * f2 + 3.0 * f3) / 6.0;
+  vec2 w2 = (1.0 + 3.0 * f + 3.0 * f2 - 3.0 * f3) / 6.0, w3 = f3 / 6.0;
+  vec2 g0 = w0 + w1, g1 = w2 + w3;
+  vec2 h0 = (i - 0.5 + w1 / g0) / uWetParams.z, h1 = (i + 1.5 + w3 / g1) / uWetParams.z;
+  return (texture(uWetness, vec2(h0.x, h0.y)).rg * g0.x + texture(uWetness, vec2(h1.x, h0.y)).rg * g1.x) * g0.y
+       + (texture(uWetness, vec2(h0.x, h1.y)).rg * g0.x + texture(uWetness, vec2(h1.x, h1.y)).rg * g1.x) * g1.y;
+}
 void applyWetness(inout Surface s, SurfaceInput si) {
   vec2 uv = wetUv(si.world);
-  if (uWetParams.y < 0.5 || any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) return;
-  vec2 wt = texture(uWetness, uv).rg;
-  float wet = clamp(wt.r, 0.0, 1.0);
-  if (wet < 0.002) return;
-  float e = 1.5 / uWetParams.z;
-  float wx = texture(uWetness, uv + vec2(e, 0.0)).r - texture(uWetness, uv - vec2(e, 0.0)).r;
-  float wz = texture(uWetness, uv + vec2(0.0, e)).r - texture(uWetness, uv - vec2(0.0, e)).r;
-  float tint = clamp(wt.g / max(wt.r, 1e-3), 0.0, 1.0);
-  vec3 juice = vec3(0.98, 0.82, 0.5);
-  float film = smoothstep(0.05, 0.5, wet);
-  float rim = smoothstep(0.03, 0.1, wet) * (1.0 - smoothstep(0.1, 0.3, wet));
-  s.albedo = mix(s.albedo, s.albedo * mix(vec3(0.9), juice, tint), film) * (1.0 - 0.1 * rim);
-  s.roughness = mix(s.roughness, 0.12, film);
-  s.clearcoat = max(s.clearcoat, film * 0.8);
-  s.clearcoatRoughness = mix(s.clearcoatRoughness, 0.05, film);
-  s.N = perturb(s.N, vec3(wx, 0.0, wz) * 0.25, 1.0);
+  if (uWetParams.y < 0.5 || any(lessThan(uv, vec2(0.002))) || any(greaterThan(uv, vec2(0.998)))) return;
+  if (texture(uWetness, uv).g < 0.05) return;
+  vec2 f = wetBicubic(uv);
+  if (f.g < 0.12) return;
+  float grain = vnoise(vec3(si.world.xz * 3000.0, 3.1)) - 0.5;
+  float grain2 = vnoise(vec3(si.world.xz * 900.0, 7.7)) - 0.5;
+  float dep = f.g + (grain * 0.035 + grain2 * 0.05) * smoothstep(0.05, 0.25, f.g);
+  float aa = max(fwidth(dep), 0.004);
+  float foot = smoothstep(0.24 - aa, 0.24 + aa, dep);
+  if (foot <= 0.0) return;
+  float e = 1.0 / uWetParams.z;
+  vec2 gx = wetBicubic(uv + vec2(e, 0.0)) - wetBicubic(uv - vec2(e, 0.0));
+  vec2 gz = wetBicubic(uv + vec2(0.0, e)) - wetBicubic(uv - vec2(0.0, e));
+  float texel = 2.0 * uWetParams.x / uWetParams.z;
+  vec2 grad = vec2(gx.g, gz.g) / (2.0 * texel);
+  float water = clamp(f.r / max(f.g, 1e-3), 0.0, 1.0);
+  float depth = smoothstep(0.24, 1.2, dep);
+  float rim = foot * (1.0 - smoothstep(0.25, 0.33, dep));
+  float edge = foot * (1.0 - smoothstep(0.26, 0.6, dep));
+  vec3 tint = dot(uJuiceTint, vec3(1.0)) > 0.01 ? uJuiceTint : vec3(0.94, 0.76, 0.38);
+  float soak = 0.55 + 0.45 * water;
+#if defined(MATERIAL_SLATE)
+  vec3 stain = mix(vec3(0.82), tint * 0.9, 0.45 * depth);
+  float darken = 0.75;
+#elif defined(MATERIAL_BOARD)
+  vec3 stain = mix(vec3(0.62), tint * 0.6, 0.35 + 0.35 * depth);
+  float darken = 1.0;
+#else
+  vec3 stain = mix(vec3(0.97, 0.95, 0.9), tint, 0.5 + 0.45 * depth);
+  float darken = 1.0;
+#endif
+  s.albedo = mix(s.albedo, s.albedo * stain, foot * soak * darken);
+  s.albedo *= 1.0 - (0.18 + 0.22 * (1.0 - water)) * rim * darken;
+  float h = 0.00035 * water + 0.00006;
+  vec3 slope = vec3(grad.x, 0.0, grad.y) * h * edge;
+  s.N = perturb(s.N, slope, foot);
+  float wetGloss = foot * water;
+  s.roughness = mix(mix(s.roughness, 0.32, foot * 0.6), 0.05, wetGloss);
+  s.clearcoat = max(s.clearcoat, wetGloss * 0.95 + foot * (1.0 - water) * 0.25);
+  s.clearcoatRoughness = mix(0.2, 0.015, water);
+  s.f0 = mix(s.f0, vec3(0.022), foot);
 }
 `;
 
@@ -283,6 +320,37 @@ Surface materialSurface(SurfaceInput si) {
 }
 `;
 
+const STEEL = `
+Surface materialSurface(SurfaceInput si) {
+  vec3 p = si.rest;
+  vec3 rn = si.restNormal;
+  Surface s = defaultSurface(normalize(si.normal));
+  if (si.cap > 0.5) {
+    float grain = fbm3(vec3(p.x * 50.0, p.y * 700.0 + sin(p.x * 90.0) * 1.5, p.z * 700.0));
+    s.albedo = mix(vec3(0.03, 0.017, 0.012), vec3(0.085, 0.045, 0.026), smoothstep(0.3, 0.75, grain));
+    s.roughness = 0.42;
+    s.clearcoat = 0.55;
+    s.clearcoatRoughness = 0.16;
+    vec2 c = vec2(p.x, p.y - 0.0155);
+    float rivet = min(min(length(c - vec2(-0.032, 0.0)), length(c - vec2(-0.07, 0.0))), length(c - vec2(-0.108, 0.0)));
+    if (rivet < 0.0027 && abs(rn.z) > 0.6) { s.albedo = vec3(0.0); s.f0 = vec3(0.6, 0.59, 0.57); s.roughness = 0.12; s.clearcoat = 0.0; }
+    return s;
+  }
+  float brush = vnoise(vec3(p.x * 25.0, p.y * 9000.0, p.z * 9000.0)) * 0.6 + vnoise(vec3(p.x * 3.0, p.y * 2400.0, 1.0)) * 0.4;
+  float bevel = smoothstep(-0.12, -0.25, rn.y);
+  float spine = smoothstep(0.7, 0.95, rn.y);
+  float haze = vnoise(vec3(p.x * 160.0, p.y * 220.0, 3.0));
+  s.albedo = vec3(0.0);
+  s.f0 = mix(vec3(0.56, 0.56, 0.55), vec3(0.66, 0.66, 0.64), bevel);
+  s.roughness = mix(mix(0.07 + 0.06 * brush + 0.04 * haze, 0.035, bevel), 0.22, spine);
+  s.N = perturb(s.N, si.restToWorld * vec3(0.0, (brush - 0.5) * 0.05, 0.0), 1.0 - bevel);
+  vec3 R = reflect(-si.V, s.N);
+  float flag = smoothstep(0.02, 0.3, abs(R.y - 0.1)) * (0.85 + 0.15 * smoothstep(-0.6, 0.2, R.x));
+  s.f0 *= mix(0.42, 1.0, flag) * (0.9 + 0.2 * brush);
+  return s;
+}
+`;
+
 export const MATERIALS = {
   orange: ORANGE_MATERIAL,
   cove: WETNESS + COVE,
@@ -290,6 +358,7 @@ export const MATERIALS = {
   counter: WETNESS + COUNTER,
   slate: WETNESS + SLATE,
   wall: WALL,
+  steel: STEEL,
 };
 
 export const GROUND_RECEIVERS = ['cove', 'board', 'counter', 'slate'];
