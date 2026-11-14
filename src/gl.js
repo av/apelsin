@@ -99,6 +99,7 @@ export function set(prog, name, v) {
   if (type === gl.INT || type === gl.BOOL) gl.uniform1i(loc, +v);
   else if (typeof v === 'number') gl.uniform1f(loc, v);
   else if (typeof v === 'boolean') gl.uniform1i(loc, v ? 1 : 0);
+  else if (type === gl.FLOAT) gl.uniform1fv(loc, v);
   else if (type === gl.FLOAT_VEC4) gl.uniform4fv(loc, v);
   else if (type === gl.FLOAT_VEC3) gl.uniform3fv(loc, v);
   else if (type === gl.FLOAT_VEC2) gl.uniform2fv(loc, v);

@@ -70,7 +70,7 @@ function roundedBoardMesh([sx, sy, sz], top, corner = 0.014, bevel = 0.004, segm
   return new Float32Array(data);
 }
 
-const light = (dir, up, size, color, intensity, soft = 0.12) => ({ dir: v3.norm(dir), up, size, color, intensity, soft });
+const light = (dir, up, size, color, intensity, soft = 0.12, shape = {}) => ({ dir: v3.norm(dir), up, size, color, intensity, soft, ...shape });
 
 export const WINDOW = { centre: [-0.16, 0.25, -0.36], half: [0.34, 0.24] };
 const windowDir = v3.norm(WINDOW.centre);
@@ -82,8 +82,8 @@ export const SCENES = {
     env: {
       top: [0.4, 0.4, 0.41], horizon: [0.5, 0.5, 0.5], bottom: [0.85, 0.84, 0.83],
       lights: [
-        light([0.235, 0.883, -0.407], [0, 1, 0], [0.64, 0.51], [1, 0.99, 0.97], 3.0, 0.2),
-        light([0.0, 0.3, 1], [0, 1, 0], [1.0, 0.75], [1, 0.995, 0.99], 0.72, 0.6),
+        light([0.235, 0.883, -0.407], [0, 1, 0], [0.64, 0.51], [1, 0.99, 0.97], 3.0, 0.2, { core: [5, 0.24], strip: [3, 0.05] }),
+        light([0.0, 0.3, 1], [0, 1, 0], [1.0, 0.75], [1, 0.995, 0.99], 0.72, 0.6, { strip: [40, 0.055, 0.3] }),
         light([-0.75, 0.35, -0.55], [0, 1, 0], [0.4, 0.12], [1, 1, 1], 1.2, 0.25),
       ],
     },
@@ -125,7 +125,7 @@ export const SCENES = {
     env: {
       top: [0.004, 0.004, 0.0045], horizon: [0.002, 0.002, 0.0022], bottom: [0.0005, 0.0005, 0.0005],
       lights: [
-        light([-0.62, 0.42, -0.66], [0, 1, 0], [0.3, 0.12], [1, 0.94, 0.86], 26, 0.25),
+        light([-0.62, 0.42, -0.66], [0, 1, 0], [0.3, 0.12], [1, 0.94, 0.86], 26, 0.25, { core: [5, 0.38] }),
         light([0.5, 0.45, 0.75], [0, 1, 0], [0.7, 0.5], [0.95, 0.95, 1], 0.14, 0.6),
       ],
     },

@@ -9,6 +9,8 @@ uniform vec3 uBottom;
 uniform vec4 uLightDir[${MAX_LIGHTS}];
 uniform vec4 uLightUp[${MAX_LIGHTS}];
 uniform vec4 uLightColor[${MAX_LIGHTS}];
+uniform vec4 uLightShape[${MAX_LIGHTS}];
+uniform float uLightStripAt[${MAX_LIGHTS}];
 uniform int uLightCount;
 uniform int uMode;
 uniform float uCubeScale;
@@ -31,8 +33,12 @@ vec3 envRadiance(vec3 d) {
     vec2 e = abs(pl) / half_;
     float soft = uLightColor[i].w;
     float m = (1.0 - smoothstep(1.0 - soft, 1.0, e.x)) * (1.0 - smoothstep(1.0 - soft, 1.0, e.y));
-    float centre = 1.0 + 0.25 * (1.0 - dot(e, e) * 0.5);
-    c += uLightColor[i].rgb * m * centre;
+    vec4 shape = uLightShape[i];
+    float profile = 1.0 + 0.25 * (1.0 - dot(e, e) * 0.5);
+    profile += shape.x * exp(-dot(e, e) / (shape.y * shape.y));
+    float sy = (pl.y / half_.y - uLightStripAt[i]) / max(shape.w, 1e-3);
+    profile += shape.z * exp(-sy * sy) * (1.0 - smoothstep(0.55, 0.85, e.x));
+    c += uLightColor[i].rgb * m * profile;
   }
   return c;
 }
@@ -190,6 +196,21 @@ function projectSH(gl, fb, prog, size, scale, readFloat) {
   return sh;
 }
 
+const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+
+export function profileMean(soft, [core, coreW, strip, stripW], stripAt = 0.62) {
+  let sum = 0;
+  const n = 48;
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+    const x = ((i + 0.5) / n) * 2.2 - 1.1, y = ((j + 0.5) / n) * 2.2 - 1.1;
+    const ex = Math.abs(x), ey = Math.abs(y), e2 = x * x + y * y;
+    const m = (1 - smooth(1 - soft, 1, ex)) * (1 - smooth(1 - soft, 1, ey));
+    const sy = (y - stripAt) / Math.max(stripW, 1e-3);
+    sum += m * (1 + 0.25 * (1 - e2 * 0.5) + core * Math.exp(-e2 / (coreW * coreW)) + strip * Math.exp(-sy * sy) * (1 - smooth(0.55, 0.85, ex)));
+  }
+  return sum / (n * n);
+}
+
 export function createIBL(gl) {
   const fmt = formats(gl);
   const readFloat = gl.caps.floatTargets;
@@ -222,13 +243,17 @@ export function createIBL(gl) {
 
   function envUniforms(desc, mode) {
     const lights = desc.lights.slice(0, MAX_LIGHTS);
-    const dir = new Float32Array(MAX_LIGHTS * 4), up = new Float32Array(MAX_LIGHTS * 4), col = new Float32Array(MAX_LIGHTS * 4);
+    const dir = new Float32Array(MAX_LIGHTS * 4), up = new Float32Array(MAX_LIGHTS * 4), col = new Float32Array(MAX_LIGHTS * 4), shape = new Float32Array(MAX_LIGHTS * 4), stripAt = new Float32Array(MAX_LIGHTS);
     lights.forEach((l, i) => {
+      const sh = [l.core?.[0] ?? 0, l.core?.[1] ?? 0.4, l.strip?.[0] ?? 0, l.strip?.[1] ?? 0.08];
+      shape.set(sh, i * 4);
+      stripAt[i] = l.strip?.[2] ?? 0.62;
+      const norm = profileMean(l.soft ?? 0.15, [0, 0.4, 0, 0.08]) / profileMean(l.soft ?? 0.15, sh, stripAt[i]);
       dir.set([...l.dir, Math.tan(l.size[0])], i * 4);
       up.set([...l.up, Math.tan(l.size[1])], i * 4);
-      col.set([l.color[0] * l.intensity, l.color[1] * l.intensity, l.color[2] * l.intensity, l.soft ?? 0.15], i * 4);
+      col.set([l.color[0] * l.intensity * norm, l.color[1] * l.intensity * norm, l.color[2] * l.intensity * norm, l.soft ?? 0.15], i * 4);
     });
-    return { uTop: desc.top, uHorizon: desc.horizon, uBottom: desc.bottom, uLightDir: dir, uLightUp: up, uLightColor: col, uLightCount: lights.length, uMode: mode, uCubeScale: cubeScale };
+    return { uTop: desc.top, uHorizon: desc.horizon, uBottom: desc.bottom, uLightDir: dir, uLightUp: up, uLightColor: col, uLightShape: shape, uLightStripAt: stripAt, uLightCount: lights.length, uMode: mode, uCubeScale: cubeScale };
   }
 
   function setInt(prog, name, v) { gl.uniform1i(prog.uniforms[name], v); }
