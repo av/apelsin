@@ -69,9 +69,7 @@ export function createWorld(gl, { juice, audio, rng }) {
   function cut(point, normal, only = null, { impulse = 0.05, sound = true, juiceAmount = 1 } = {}) {
     const n = v3.norm(normal);
     let count = 0;
-    const targets = (only || w.pieces).slice();
-    const born = [];
-    for (const piece of targets) {
+    for (const piece of (only || w.pieces).slice()) {
       if (!w.pieces.includes(piece)) continue;
       const rp = worldToRest(piece, point), rn = worldDirToRest(piece, n);
       if (Math.abs(v3.dot(v3.sub(piece.com, rp), rn)) > piece.radius) continue;
@@ -79,38 +77,24 @@ export function createWorld(gl, { juice, audio, rng }) {
       if (!halves) continue;
       const kids = halves.map((g) => createPiece(gl, g));
       if (kids.some((k) => k.volume < MIN_VOLUME)) { kids.forEach(disposePiece); continue; }
-      const vel = (p) => (w.physics && piece.body ? w.physics.velocityAt(piece, p) : [0, 0, 0]);
       const av = piece.body ? piece.body.angvel() : { x: 0, y: 0, z: 0 };
+      const vels = kids.map((k) => (w.physics && piece.body ? w.physics.velocityAt(piece, restToWorld(piece, k.com)) : [0, 0, 0]));
+      const prev = piece.prevModel.slice();
+      remove(piece);
       kids.forEach((k, i) => {
         k.rotation = piece.rotation.slice();
         k.position = restToWorld(piece, k.com);
         k.hasPrev = false;
         updateModel(k);
-        k.prevModel.set(piece.prevModel ? mulPrev(piece, k) : k.model);
-        const sign = i === 0 ? 1 : -1;
-        const lv = v3.add(vel(k.position), v3.scale(n, sign * impulse));
-        remove(piece === k ? null : piece);
-        add(k, { linvel: lv, angvel: [av.x, av.y, av.z] });
-        born.push(k);
+        k.prevModel.set(prev);
+        add(k, { linvel: v3.add(vels[i], v3.scale(n, (i === 0 ? 1 : -1) * impulse)), angvel: [av.x, av.y, av.z] });
+        for (const c of k.caps) if (Math.abs(Math.abs(v3.dot(c.normal, rn)) - 1) < 1e-4) juice.emitFromCap(k, c, w.params, Math.round(26 * juiceAmount), 0.22);
       });
       count++;
       w.cuts++;
     }
-    if (count) {
-      for (const k of born) {
-        const cap = k.caps.find((c) => v3.dot(c.normal, worldDirToRest(k, n)) * 1 < -0.999 || v3.dot(c.normal, worldDirToRest(k, n)) > 0.999);
-        const fresh = k.caps.filter((c) => Math.abs(Math.abs(v3.dot(c.normal, worldDirToRest(k, n))) - 1) < 1e-3);
-        for (const c of fresh.length ? fresh : cap ? [cap] : []) juice.emitFromCap(k, c, w.params, Math.round(26 * juiceAmount), 0.22);
-      }
-      if (sound) audio.slice(Math.min(1.4, 0.7 + count * 0.15));
-    }
+    if (count && sound) audio.slice(Math.min(1.4, 0.7 + count * 0.15));
     return count;
-  }
-
-  function mulPrev(parent, kid) {
-    const m = new Float32Array(16);
-    m.set(parent.prevModel);
-    return m;
   }
 
   function attachPhysics(physics, colliders) {
