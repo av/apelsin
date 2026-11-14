@@ -435,3 +435,22 @@ test('the stem end carries an olive calyx button with a stem stub', async () => 
   assert.deepEqual(page.errors, []);
   await page.close();
 });
+
+test('without float render targets the studio background still clips to white', async () => {
+  const page = await browser.newPage({ viewport: { width: 1000, height: 640 } });
+  await page.addInitScript(() => {
+    const original = WebGL2RenderingContext.prototype.getExtension;
+    WebGL2RenderingContext.prototype.getExtension = function (name) { return /color_buffer_float|float_blend/i.test(name) ? null : original.call(this, name); };
+  });
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto(`${base}?test&preset=reference&seed=7`);
+  await page.waitForFunction(() => window.apelsin?.ready);
+  await page.evaluate(() => window.apelsin.ready);
+  assert.equal((await page.evaluate(() => window.apelsin.info())).floatTargets, false);
+  const px = await pixels(page, 30);
+  assert.ok(px.corner.r >= 250 && px.corner.g >= 250 && px.corner.b >= 248, `fallback background ${JSON.stringify(px.corner)}`);
+  assert.ok(px.all.orange > 0.05, 'fallback still renders the fruit');
+  assert.deepEqual(errors, []);
+  await page.close();
+});

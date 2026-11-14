@@ -73,7 +73,7 @@ export function createPost(gl) {
 
   function combine(ctx) {
     bind(gl, ctx.fbos.combine);
-    use(progs.combine, { uDiffuse: ctx.diffuse, uSpecular: ctx.targets.specular, uAlbedo: ctx.targets.albedo, uDepth: ctx.targets.depth, uEnvSource: ctx.ibl.envSource });
+    use(progs.combine, { uDiffuse: ctx.diffuse, uSpecular: ctx.targets.specular, uAlbedo: ctx.targets.albedo, uDepth: ctx.targets.depth, uEnvSource: ctx.ibl.envSource, uDecode: gl.caps.floatTargets ? 1 : 4 });
     fullscreen(gl);
     ctx.color = ctx.targets.hdr;
   }

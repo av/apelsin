@@ -43,7 +43,7 @@ export function createRenderer(gl, canvas, { tier = 'high' } = {}) {
   const post = createPost(gl);
   const prepassProg = program(gl, UBER_VS, uberFragment(null, 'prepass'), { label: 'prepass' });
   const materialProgs = {};
-  const materialProgram = (name) => materialProgs[name] || (materialProgs[name] = program(gl, UBER_VS, uberFragment(name, 'main'), { label: `material-${name}`, defines: { [`MATERIAL_${name.toUpperCase()}`]: 1, ...(GROUND_RECEIVERS.includes(name) ? { GROUND_RECEIVER: 1 } : {}) } }));
+  const materialProgram = (name) => materialProgs[name] || (materialProgs[name] = program(gl, UBER_VS, uberFragment(name, 'main'), { label: `material-${name}`, defines: { [`MATERIAL_${name.toUpperCase()}`]: 1, ...(GROUND_RECEIVERS.includes(name) ? { GROUND_RECEIVER: 1 } : {}), ...(gl.caps.floatTargets ? {} : { OUTPUT_SCALE: 0.25 }) } }));
   for (const name of Object.keys(MATERIALS)) materialProgram(name);
   const white = texture(gl, { width: 1, height: 1, internal: gl.RGBA8, format: gl.RGBA, type: gl.UNSIGNED_BYTE, data: new Uint8Array([255, 255, 255, 255]) });
   const black = texture(gl, { width: 1, height: 1, internal: gl.RGBA8, format: gl.RGBA, type: gl.UNSIGNED_BYTE, data: new Uint8Array([0, 0, 0, 255]) });

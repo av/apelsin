@@ -120,6 +120,7 @@ uniform sampler2D uSpecular;
 uniform sampler2D uAlbedo;
 uniform sampler2D uDepth;
 uniform samplerCube uEnvSource;
+uniform float uDecode;
 in vec2 vUv;
 out vec4 outColor;
 void main() {
@@ -130,7 +131,7 @@ void main() {
     outColor = vec4(textureLod(uEnvSource, dir, uBackground.x).rgb * uBackground.y / uEnvParams.z, 1.0);
     return;
   }
-  outColor = vec4(texture(uDiffuse, vUv).rgb * texture(uAlbedo, vUv).rgb + texture(uSpecular, vUv).rgb, 1.0);
+  outColor = vec4((texture(uDiffuse, vUv).rgb * texture(uAlbedo, vUv).rgb + texture(uSpecular, vUv).rgb) * uDecode, 1.0);
 }`;
 
 export const TAA_FS = FRAME_UBO + DEPTH + `

@@ -281,10 +281,10 @@ export function uberFragment(material, pass) {
   Surface s = materialSurface(si);
   vec3 diffuse, specular;
   shadeSurface(s, si, diffuse, specular);
-  outDiffuse = vec4(diffuse, encodeProfile(s));
-  outSpecular = vec4(specular, 1.0);
+  outDiffuse = vec4(diffuse * OUTPUT_SCALE, encodeProfile(s));
+  outSpecular = vec4(specular * OUTPUT_SCALE, 1.0);
   outAlbedo = vec4(s.albedo, 1.0);`;
-  return FRAME_UBO + NOISE + SURFACE + (pass === 'main' ? LIGHTING : '') + `
+  return '#ifndef OUTPUT_SCALE\n#define OUTPUT_SCALE 1.0\n#endif\n' + FRAME_UBO + NOISE + SURFACE + (pass === 'main' ? LIGHTING : '') + `
 uniform vec4 uMaterialColor;
 uniform mat4 uModel;
 in vec3 vRest;
