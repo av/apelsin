@@ -301,11 +301,11 @@ Surface orangeInterior(SurfaceInput si) {
   float gap = oExtra.w > 0.0 ? 0.0016 * yN * yN * yN * yN * (0.5 + pv.x) : 0.0;
   float dD = depth - peel - gap;
   float dC = rho - coreR;
-  float kC = 0.0038 + 0.0024 * fract(fseg * 0.37 + oRind.w), kD = 0.0012;
+  float kC = 0.0038 + 0.0024 * fract(fseg * 0.37 + oRind.w), kD = 0.0008;
   float segD = smin(smin(dS, dD, kD), dC, kC);
   float rawMin = min(min(dS, dD), dC);
   float fill = clamp((rawMin - segD) / 0.0004, 0.0, 1.0);
-  float memHalf = oLayers.w * (0.5 + 0.9 * exp(-max(dC, 0.0) / 0.004));
+  float memHalf = oLayers.w * (0.4 + 0.9 * exp(-max(dC, 0.0) / 0.004));
   float memW = max(memHalf, px * 0.7);
   float memCov = memHalf / memW;
   vec3 albedo = oFlesh.rgb;
@@ -333,7 +333,7 @@ Surface orangeInterior(SurfaceInput si) {
     float wallW = 0.05 + vfw * 0.9;
     float wallVar = smoothstep(0.25, 0.75, vnoise(q * vec3(1.2, 4.0, 4.0) + 17.0));
     float wallLine = (1.0 - smoothstep(wallW * 0.25, wallW, v.f2 - v.f1)) * min(0.05 / wallW * 1.2, 1.0) * (0.15 + 0.85 * wallVar);
-    wallK = wallLine * vdetail;
+    wallK = wallLine * vdetail * (1.0 - 0.75 * smoothstep(0.55, 0.9, abs(v.m.x) / max(v.f1, 1e-3)));
     float domeD = inversesqrt(max(1.0 - min(f1 * f1, 1.0), 0.04));
     vec3 gq = v.m / (v.k * vec3(1.0, v.taper, v.taper)) * domeD;
     vec3 gAlong = aHat / L, gTan = ePsi * fan / W, gAcross = xHat / Wa;
@@ -347,10 +347,10 @@ Surface orangeInterior(SurfaceInput si) {
     gN += sB * (-2.0 * uu / hw * sR * ePsi + (1.0 - uu * uu) * 3.14159 * cos(3.14159 * radial) / span * rhoHat);
     float mdet = 1.0 - smoothstep(0.25, 0.7, px * 6000.0);
     vec4 micro = noiseD(vec3(dot(p, aHat) * 2500.0, dot(p, ePsi) * 7000.0, dot(p, xHat) * 7000.0) + fseg);
-    gN += (micro.y * aHat * 2500.0 + micro.z * ePsi * 7000.0 + micro.w * xHat * 7000.0) * 0.000012 * mdet;
+    gN += (micro.y * aHat * 2500.0 + micro.z * ePsi * 7000.0 + micro.w * xHat * 7000.0) * 0.000028 * mdet;
     vec3 flesh = fleshColour(radial, v.id, fseg);
     float inner = smoothstep(0.15, 1.0, f1);
-    flesh *= mix(vec3(0.94, 0.9, 0.82), vec3(1.04, 1.06, 1.1), inner * vdetail);
+    flesh *= mix(vec3(0.9, 0.84, 0.74), vec3(1.05, 1.08, 1.12), mix(0.5, inner, vdetail));
     if (oFlesh2.w > 0.0) {
       float streak = fbm3(vec3(q.x * 0.6, q.y * 1.4, q.z * 1.4) + 9.0) * 0.6 + 0.4 * v.id.x;
       float septumNear = 1.0 - smoothstep(0.0, 0.004, dS);
@@ -389,8 +389,8 @@ Surface orangeInterior(SurfaceInput si) {
     ccRough = mix(ccRough, 0.01, bead);
     cavity = mix(1.0, 0.85, wallK);
   }
-  float halo = (1.0 - smoothstep(memW, memW + 0.0006 + px, segD)) * (1.0 - step(segD, memW * 0.4));
-  albedo = mix(albedo, mix(albedo, oFleshWall.rgb, 0.6), halo * 0.6);
+  float halo = (1.0 - smoothstep(memW, memW + 0.00035 + px, segD)) * (1.0 - step(segD, memW * 0.4));
+  albedo = mix(albedo, mix(albedo, oFleshWall.rgb, 0.6), halo * 0.4);
   clear = mix(clear, 0.55, halo);
   ccRough = mix(ccRough, 0.015, halo);
   float segFlesh = smoothstep(memW * 0.4, memW, segD);
