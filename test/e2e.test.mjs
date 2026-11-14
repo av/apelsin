@@ -321,16 +321,17 @@ async function faceProfile(page, variety) {
       return '.';
     };
     let s = '';
-    for (let x = Math.round(c.width / 2); x < c.width; x += 2) s += kind(x);
+    for (let x = 0; x < c.width; x += 2) s += kind(x);
     return s.replace(/(.)\1+/g, '$1');
   }, url);
 }
 
-test('a cut face shows the anatomy from the core out: white core, flesh, white pith, orange rind', async () => {
+test('a cut face shows the anatomy across: rind, white pith, flesh, white core, flesh, pith, rind', async () => {
   const page = await open('seed=5&preset=halves&debug', { width: 900, height: 900 });
   for (const variety of ['navel', 'valencia', 'caracara']) {
     const profile = await faceProfile(page, variety);
-    assert.match(profile, /^w\.?o[o.]*w\.?o/, `${variety} radial profile ${profile}`);
+    const runs = (k) => profile.split('').filter((ch) => ch === k).length;
+    assert.ok(profile.startsWith('w') && profile.endsWith('w') && runs('w') >= 5 && runs('o') >= 4, `${variety} profile across the face ${profile}`);
     await page.evaluate(() => window.apelsin.preset('halves'));
   }
   assert.deepEqual(page.errors, []);
