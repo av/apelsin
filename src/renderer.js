@@ -214,7 +214,7 @@ export function createRenderer(gl, canvas, { tier = 'high' } = {}) {
     { name: 'dof', enabled: (ctx) => ctx.dof && (ctx.frame.macro || ctx.tier.index >= 2), run: (ctx) => post.dof(ctx) },
     { name: 'taa', enabled: (ctx) => ctx.tier.taa, run: (ctx) => post.taa(ctx) },
     { name: 'bloom', enabled: (ctx) => ctx.tier.bloom, run: (ctx) => post.bloom(ctx) },
-    { name: 'tonemap', run: (ctx) => { if (r.debugTexture) { ctx.color = r.debugTexture(); ctx.bloom = null; } post.tonemap(ctx); } },
+    { name: 'tonemap', run: (ctx) => { if (r.debugTexture) { ctx.color = r.debugTexture(ctx); ctx.bloom = null; } post.tonemap(ctx); } },
   ];
 
   function focusUv(frame, camera, casters) {

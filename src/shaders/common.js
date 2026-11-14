@@ -220,7 +220,10 @@ void shadeSurface(Surface s, SurfaceInput si, out vec3 diffuse, out vec3 specula
   vec3 N = s.N, V = si.V, L = uKeyDir.xyz, Ng = si.normal;
   if (dot(Ng, V) < 0.0) Ng = -Ng;
   float NoV = clamp(dot(N, V), 1e-4, 1.0);
-  float rough = clamp(s.roughness, 0.02, 1.0);
+  vec3 dNx = dFdx(N), dNy = dFdy(N);
+  float kernel = min(0.25 * (dot(dNx, dNx) + dot(dNy, dNy)), 0.12);
+  float rough = clamp(sqrt(s.roughness * s.roughness + kernel), 0.02, 1.0);
+  s.clearcoatRoughness = sqrt(s.clearcoatRoughness * s.clearcoatRoughness + kernel);
   vec3 single;
   vec3 specColor = specularLobe(s.f0, rough, NoV, single);
   vec3 R = reflect(-V, N);

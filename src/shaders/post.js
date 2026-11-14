@@ -45,7 +45,7 @@ void main() {
     occ += (sz >= S.z + 0.0008 ? 1.0 : 0.0) * range;
   }
   float ao = clamp(1.0 - occ / float(n), 0.0, 1.0);
-  outColor = vec4(pow(ao, 1.4), 0.0, 0.0, 1.0);
+  outColor = vec4(pow(ao, 2.2), 0.0, 0.0, 1.0);
 }`;
 
 export const BLUR_FS = DEPTH + `
