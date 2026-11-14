@@ -69,7 +69,7 @@ export const ORANGE_RIND = `
 Surface orangeRind(SurfaceInput si) {
   vec3 p = si.rest;
   vec3 d = normalize(p);
-  vec3 Nr = orangeShapeNormal(d);
+  vec3 Nr = normalize(si.restNormal);
   float a = oShape.x;
   float th = acos(clamp(d.y, -1.0, 1.0));
   float psi = atan(d.z, d.x + 1e-7);
@@ -87,15 +87,15 @@ Surface orangeRind(SurfaceInput si) {
   Cell c2 = voronoiShell(q * 0.3 + 7.1, Nr, 0.9);
   g += -c2.toCenter * exp(-c2.f1 * c2.f1 / 0.12) * 0.2;
   g *= detail;
-  float m1 = fbm3(p * 70.0 + oNoise.yzx), m2 = fbm3(p * 260.0 + oNoise.zxy);
+  float m1 = fbm3(p * 70.0 + oNoise.yzx), m2 = vnoise(p * 260.0 + oNoise.zxy);
   vec3 albedo = oRind.rgb * (1.0 + oGland.z * (m1 - 0.5) * 1.6 + 0.08 * (m2 - 0.5));
   float stemT = 1.0 - smoothstep(0.12, 0.75, th);
   albedo = mix(albedo, oRindStem.rgb, stemT * stemT * 0.8);
-  float blushMask = smoothstep(0.45, 0.75, fbm3(p * 35.0 + oNoise.xzy + 3.0) + 0.2 * d.x);
+  float blushMask = oBlush.w > 0.0 ? smoothstep(0.45, 0.75, fbm3(p * 35.0 + oNoise.xzy + 3.0) + 0.2 * d.x) : 0.0;
   albedo = mix(albedo, oBlush.rgb, blushMask * oBlush.w);
   albedo *= mix(1.0, 0.86, pit * detail);
   float rough = mix(0.48, 0.36, rim * detail);
-  float scuff = smoothstep(0.62, 0.7, fbm3(p * 420.0 + oNoise.zyx));
+  float scuff = smoothstep(0.68, 0.76, vnoise(p * 300.0 + oNoise.zyx) * 0.65 + m2 * 0.35);
   rough = mix(rough, 0.6, scuff * 0.7);
   albedo = mix(albedo, albedo * vec3(1.05, 1.0, 0.9) + 0.02, scuff * 0.4);
   float clear = mix(0.7, 0.2, scuff);
@@ -185,11 +185,13 @@ Surface orangeInterior(SurfaceInput si) {
   float rough = mix(0.07, 0.2, wall);
   float clear = 0.3 + 0.4 * smoothstep(0.3, 0.6, fbm3(p * 260.0 + oNoise.zyx));
   float ccRough = 0.04;
-  Cell b = voronoi3(p * 560.0 + oNoise.yxz, 0.9);
-  float bead = step(0.84, b.id.x) * (1.0 - smoothstep(0.18, 0.3, b.f1));
-  gN += -b.toCenter * bead * 1.8 * vdetail;
-  ccRough = mix(ccRough, 0.015, bead);
-  clear = max(clear, bead);
+  if (depth > peel) {
+    Cell b = voronoi3(p * 560.0 + oNoise.yxz, 0.9);
+    float bead = step(0.84, b.id.x) * (1.0 - smoothstep(0.18, 0.3, b.f1));
+    gN += -b.toCenter * bead * 1.8 * vdetail;
+    ccRough = mix(ccRough, 0.015, bead);
+    clear = max(clear, bead);
+  }
   float profile = 3.0, width = 0.9;
   vec3 sssColor = oFlesh.rgb * 0.5;
   vec3 trans = oFlesh.rgb * vec3(0.66, 0.25, 0.02);
@@ -225,9 +227,14 @@ Surface orangeInterior(SurfaceInput si) {
     }
   }
   vec3 sq = d * (R * oGland.x * 1.6) + oNoise.xyz;
-  Cell gl = voronoiShell(sq, d, 0.9);
-  float tooth = (1.0 - smoothstep(0.28, 0.42, gl.f1)) * (1.0 - smoothstep(0.6, 1.2, px * oGland.x * 1.6));
-  float boundary = tf + tooth * 0.00055 * (0.6 + 0.8 * gl.id.y);
+  float tooth = 0.0, boundary = tf, gland = 0.0;
+  if (depth < tf + 0.0012) {
+    Cell gl = voronoiShell(sq, d, 0.9);
+    tooth = (1.0 - smoothstep(0.28, 0.42, gl.f1)) * (1.0 - smoothstep(0.6, 1.2, px * oGland.x * 1.6));
+    boundary = tf + tooth * 0.00055 * (0.6 + 0.8 * gl.id.y);
+    Cell og = voronoi3(sq * 1.4 + 9.0, 0.9);
+    gland = (1.0 - smoothstep(0.22, 0.34, og.f1)) * step(0.0002, depth) * (1.0 - smoothstep(0.6, 1.2, px * oGland.x * 2.2));
+  }
   float pithK = 1.0 - smoothstep(peel - px * 0.6, peel + px * 0.6, depth);
   vec3 pithCol = mix(oPith.rgb * vec3(1.02, 1.02, 1.14), oPith.rgb, smoothstep(peel - 0.0008, tf + 0.0012, depth));
   pithCol = mix(pithCol, oPith.rgb * vec3(0.97, 0.98, 0.4), 1.0 - smoothstep(tf, tf + 0.0007, depth));
@@ -238,8 +245,6 @@ Surface orangeInterior(SurfaceInput si) {
   ccRough = mix(ccRough, 0.15, pithK);
   gN = mix(gN, (vec3(fibre) - 0.5) * vec3(0.12, 0.0, 0.12), pithK);
   float flav = 1.0 - smoothstep(boundary - px * 0.6, boundary + px * 0.6, depth);
-  Cell og = voronoi3(sq * 1.4 + 9.0, 0.9);
-  float gland = (1.0 - smoothstep(0.22, 0.34, og.f1)) * step(0.0002, depth) * (1.0 - smoothstep(0.6, 1.2, px * oGland.x * 2.2));
   vec3 flavCol = mix(oRind.rgb * vec3(1.14, 1.05, 1.0), vec3(0.982, 0.266, 0.02), 1.0 - smoothstep(0.00015, 0.00035, depth));
   flavCol = mix(flavCol, vec3(0.973, 0.665, 0.033), max(gland * 0.85, tooth * smoothstep(tf - 0.0004, tf, depth)));
   albedo = mix(albedo, flavCol, flav);

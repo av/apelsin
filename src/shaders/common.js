@@ -32,7 +32,12 @@ uvec3 pcg3d(uvec3 v) {
   v.x += v.y * v.z; v.y += v.z * v.x; v.z += v.x * v.y;
   return v;
 }
-vec3 hash33(vec3 p) { return vec3(pcg3d(uvec3(ivec3(floor(p)) + 32768))) * (1.0 / 4294967295.0); }
+vec3 hash33(vec3 p) {
+  vec3 q = fract(floor(p) * vec3(0.1031, 0.1030, 0.0973));
+  q += dot(q, q.yxz + 33.33);
+  return fract((q.xxy + q.yxx) * q.zyx);
+}
+vec3 hash33Exact(vec3 p) { return vec3(pcg3d(uvec3(ivec3(floor(p)) + 32768))) * (1.0 / 4294967295.0); }
 float hash13(vec3 p) { return hash33(p).x; }
 float hash12(vec2 p) { return hash33(vec3(p, 17.0)).x; }
 float vnoise(vec3 p) {

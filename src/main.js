@@ -205,6 +205,7 @@ function boot() {
     screenshot: (scale = 1) => capture(scale),
     setQuality: (name) => { if (!TIER_NAMES.includes(name)) return false; state.quality = name; renderer.setTier(name); return true; },
     camera: (o) => { camera.set(o, true); return { yaw: camera.yaw, pitch: camera.pitch, distance: camera.distance, target: camera.target }; },
+    internals: DEBUG ? { app, renderer, world, camera, juice, gl } : undefined,
     timeFrames: (n = 30) => { const t0 = performance.now(); for (let i = 0; i < n; i++) frame(1 / 60); gl.finish(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4)); return (performance.now() - t0) / n; },
   };
 }
