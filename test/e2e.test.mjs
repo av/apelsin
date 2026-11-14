@@ -288,3 +288,61 @@ test('without webgl2 the page shows a short message instead of a blank page', as
   assert.match(await page.textContent('#nogl'), /WebGL2/);
   await page.close();
 });
+
+async function stats(page, frames = 20) {
+  await page.evaluate((n) => window.apelsin.step(n), frames);
+  const url = await page.evaluate(() => window.apelsin.screenshot());
+  return page.evaluate(async (src) => {
+    const img = new Image();
+    img.src = src;
+    await img.decode();
+    const c = document.createElement('canvas');
+    c.width = img.width; c.height = img.height;
+    const ctx = c.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+    const { data } = ctx.getImageData(0, 0, c.width, c.height);
+    const at = (x, y) => { const k = (y * c.width + x) * 4; return [data[k], data[k + 1], data[k + 2]]; };
+    let white = 0, warm = 0, n = 0;
+    for (let y = 0; y < c.height; y += 2) for (let x = 0; x < c.width; x += 2) {
+      const [r, g, b] = at(x, y);
+      n++;
+      if (r >= 250 && g >= 250 && b >= 248) white++;
+      if (r > 150 && r < 238 && r - b > 45 && r - b < 110 && g > b && g < r - 20) warm++;
+    }
+    const band = (y0, y1) => {
+      let bright = 0, m = 0, grad = 0;
+      for (let y = Math.floor(y0 * c.height); y < y1 * c.height - 1; y++) for (let x = 0; x < c.width - 1; x++) {
+        const a = at(x, y), r = at(x + 1, y), d = at(x, y + 1);
+        const l = (a[0] + a[1] + a[2]) / 3;
+        m++;
+        if (l > 235) bright++;
+        grad += Math.abs(l - (r[0] + r[1] + r[2]) / 3) + Math.abs(l - (d[0] + d[1] + d[2]) / 3);
+      }
+      return { bright: bright / m, grad: grad / m };
+    };
+    return { white: white / n, warm: warm / n, top: band(0, 0.12), all: band(0, 1) };
+  }, url);
+}
+
+test('the reference shot is high key with warm contact shadows under the pieces', async () => {
+  const page = await open('preset=reference&seed=7', { width: 1280, height: 800 });
+  const s = await stats(page, 60);
+  assert.ok(s.white > 0.45, `clipped white background fraction ${s.white}`);
+  assert.ok(s.warm > 0.004, `warm shadow fraction ${s.warm}`);
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
+
+test('the kitchen shows a bright window behind the board and macro blurs the background', async () => {
+  const page = await open('scene=kitchen&preset=halves&seed=7&q=high', { width: 1280, height: 800 });
+  const kitchen = await stats(page, 60);
+  assert.ok(kitchen.top.bright > 0.05, `window brightness in the top band ${kitchen.top.bright}`);
+  await page.evaluate(() => window.apelsin.setScene('studio'));
+  await page.evaluate(() => window.apelsin.camera({ distance: 0.22, pitch: 0.45 }));
+  const sharp = await stats(page, 30);
+  await page.keyboard.press('m');
+  const blurred = await stats(page, 30);
+  assert.ok(blurred.all.grad < sharp.all.grad * 0.85, `macro depth of field softens out-of-focus detail ${sharp.all.grad} -> ${blurred.all.grad}`);
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
