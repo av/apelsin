@@ -45,7 +45,7 @@ function boot() {
   camera.snap = TEST;
   const audio = createAudio();
   const juice = createJuice(gl, rng);
-  const world = createWorld(gl, { juice, audio, rng });
+  const world = createWorld(gl, { juice, audio });
   juice.on('splat', () => audio.drip());
 
   const app = {

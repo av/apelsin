@@ -1,11 +1,11 @@
 import { orangeMesh, hullPoints } from './orange/mesh.js';
 import { slicePiece } from './orange/slice.js';
 import { createPiece, updateModel, disposePiece, worldToRest, worldDirToRest, restToWorld, drawable } from './orange/piece.js';
-import { quat, v3 } from './math.js';
+import { quat, v3, mulberry32 } from './math.js';
 
 const MIN_VOLUME = 3e-8;
 
-export function createWorld(gl, { juice, audio, rng }) {
+export function createWorld(gl, { juice, audio }) {
   const w = { pieces: [], params: null, physics: null, floorAt: () => 0, baseMesh: null, cuts: 0 };
 
   function hull(piece) { return piece.hull || (piece.hull = hullPoints(piece.geometry, piece.com)); }
@@ -53,6 +53,7 @@ export function createWorld(gl, { juice, audio, rng }) {
     const piece = createPiece(gl, w.baseMesh.mesh);
     let rot = quat.identity();
     if (tilt) {
+      const rng = mulberry32(params.seed ^ 0x5bd1e995);
       const axis = v3.norm([rng() - 0.5, 0, rng() - 0.5]);
       const lean = params.c > params.a * 1.005 ? Math.PI / 2 - 0.12 + rng() * 0.1 : 0.06 + rng() * 0.12;
       rot = quat.mul(quat.axisAngle([0, 1, 0], rng() * Math.PI * 2), quat.axisAngle(axis, lean));
