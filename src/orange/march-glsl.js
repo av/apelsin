@@ -33,7 +33,8 @@ const float ENV_K = 0.88;
 float envelope(vec3 p) {
   float r = length(p);
   vec3 d = p / max(r, 1e-7);
-  return (r - shapeAt(d).x - envelopeRelief(p)) * ENV_K;
+  float k = p.y > 0.0 && dot(p.xz, p.xz) < 0.0000484 ? 0.3 : ENV_K;
+  return (r - shapeAt(d).x - envelopeRelief(p)) * k;
 }
 vec3 envelopeNormal(vec3 p) {
   float e = 0.00005;
