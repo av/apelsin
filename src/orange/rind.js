@@ -64,20 +64,23 @@ float pitHeight(vec3 d, float R, vec4 g, out float core, out vec3 gid) {
   x *= vec2(1.0 / sqrt(ell), sqrt(ell));
   float th = atan(x.y, x.x);
   float lobes = 1.0 + 0.12 * gid2.y * cos(2.0 * th + gid2.z * 6.28) + 0.08 * gid.z * cos(3.0 * th + gid2.x * 6.28);
-  float rr = length(x) / lobes;
-  float s = g.w * mix(1.1, 1.6, gid2.x);
+  float s = g.w * mix(1.3, 1.8, gid2.x);
+  float lx = length(x);
+  float rr = lx / mix(1.0, lobes, smoothstep(0.0, s * 0.8, lx));
   float vis = uCushion.z * (0.65 + 0.7 * vnoise(d * R * 1000.0 / 6.5 + uSeed.yzx * 20.0));
   float depth = uCushion.x * mix(0.5, 1.3, gid2.z) * vis * sqrt(g.w / 0.00033);
-  float sc = g.w * mix(0.3, 0.45, gid.y);
+  float sc = max(g.w * mix(0.5, 0.7, gid.y), 0.00016);
   float cd = uCushion.y * mix(0.3, 1.4, gid2.z * gid2.z) * vis;
-  core = exp(-pow(rr / (sc * 1.4), 2.0));
-  return -depth * exp(-pow(rr / s, 2.0)) - cd * exp(-pow(rr / sc, 2.0));
+  core = exp(-pow(lx / (sc * 1.1), 2.0));
+  float S = min(s * 2.0, 0.001), Sc = sc * 2.2;
+  float w1 = max(1.0 - rr * rr / (S * S), 0.0), w2 = max(1.0 - lx * lx / (Sc * Sc), 0.0);
+  return -depth * w1 * w1 * w1 - cd * w2 * w2 * w2;
 }
 struct Pits { float h; float k; vec3 id; };
-Pits pitsAt(vec3 d, float R, vec4 gs[13], int n) {
+Pits pitsAt(vec3 d, float R, vec4 gs[25], int n) {
   Pits P; P.h = 0.0; P.k = 0.0; P.id = vec3(0.5);
   float best = 0.0;
-  for (int i = 0; i < 13; i++) {
+  for (int i = 0; i < 25; i++) {
     if (i >= n) break;
     float core; vec3 id;
     P.h += pitHeight(d, R, gs[i], core, id);
@@ -191,7 +194,7 @@ float extraHeight(vec3 d, float poleR, out float sep, out float stub, out float 
   }
   return h;
 }
-float totalHeight(vec3 d, float R, vec4 gs[13], int n, float poleR, out Pits P) {
+float totalHeight(vec3 d, float R, vec4 gs[25], int n, float poleR, out Pits P) {
   P = pitsAt(d, R, gs, n);
   float sep, stub, vein, hole, crease, furrow;
   float e = extraHeight(d, poleR, sep, stub, vein, hole, crease, furrow);
@@ -207,14 +210,15 @@ void main() {
   vec3 t1, t2;
   tangents(d, t1, t2);
   float texel = 2.0 / uSize * pow(max(max(abs(d.x), abs(d.y)), abs(d.z)), 1.5);
-  vec4 gs[13];
+  vec4 gs[25];
   int n = 0;
-  for (int i = 0; i < 13; i++) {
-    float a = float(i) * 1.0471976 + (i > 6 ? 0.5235988 : 0.0) + uSeed.w;
-    vec3 tap = i == 0 ? d : normalize(d + (cos(a) * t1 + sin(a) * t2) * ((i > 6 ? 0.00092 : 0.00046) / R));
+  for (int i = 0; i < 25; i++) {
+    int ring = (i + 7) / 8;
+    float a = float(i) * 0.7853982 + float(ring) * 0.3926991 + uSeed.w;
+    vec3 tap = i == 0 ? d : normalize(d + (cos(a) * t1 + sin(a) * t2) * (float(ring) * 0.00042 / R));
     vec4 g = glandAt(tap);
     bool dup = g.w <= 0.0;
-    for (int j = 0; j < 13; j++) { if (j >= n) break; if (gs[j] == g) dup = true; }
+    for (int j = 0; j < 25; j++) { if (j >= n) break; if (gs[j] == g) dup = true; }
     if (!dup) gs[n++] = g;
   }
   float poleR = shapeAt(vec3(0, 1, 0)).x;
@@ -398,7 +402,7 @@ function rindUniforms(shape, p) {
     uStemCol: [...(p.rindStem || [0.591, 0.06, 0]), 0.35 + rnd() * 0.35],
     uPal: [0.12 + rnd() * 0.25, 0.08 + rnd() * 0.22, 0.06 + rnd() * 0.08, rnd() < 0.3 ? rnd() * 0.25 : 0],
     uUndul: [0.00009 + rnd() * 0.00008, 0.00005 + rnd() * 0.00004, 0.000015 + rnd() * 0.000015, 0.1 + rnd() * 0.04],
-    uCushion: [0.00032 + rnd() * 0.00012, 0.00011 + rnd() * 0.00005, 1, 0],
+    uCushion: [0.00032 + rnd() * 0.00012, 0.00007 + rnd() * 0.00003, 1, 0],
     uCalyx: [cx.radius, cx.inner, cx.stemR, cx.stemH],
     uStem: [cx.stemTilt[0] * cx.stemH * 0.6, cx.stemTilt[1] * cx.stemH * 0.6, cx.brown, 4 + Math.floor(rnd() * 5)],
     uNavel: [shape.navelOpen > 0.02 ? shape.navelOpen : 0, shape.navelDepth || 0, 7 + Math.floor(rnd() * 4), 0],
