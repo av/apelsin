@@ -56,7 +56,7 @@ float ridgeLift(vec3 p, int i) {
     if (j >= uPlaneCount) break;
     if (j != i) m = min(m, uPlanes[j].w - dot(uPlanes[j].xyz, p));
   }
-  float k = 1.0 - smoothstep(0.0, 0.0012, max(m, 0.0));
+  float k = (1.0 - smoothstep(0.0, 0.0012, max(m, 0.0))) * smoothstep(0.003, 0.006, length(p.xz));
   if (k <= 0.0) return 0.0;
   return gPx > 0.00015 ? k * 0.00012 : k * 0.00025 * vnoise(p * 1500.0 + oNoise.zxy);
 }

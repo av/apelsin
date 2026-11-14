@@ -17,7 +17,7 @@ float smin(float a, float b, float k) { float h = max(k - abs(a - b), 0.0) / k; 
 export const FIELD_GLSL = `
 float gPx = 0.0;
 const float H_MIN = -0.0006;
-const float H_MAX = 0.0008;
+const float H_MAX = 0.001;
 struct Anat {
   vec3 p; vec3 dir; vec4 sh;
   float r; float depthO; float depthP; float flav;
@@ -76,7 +76,7 @@ Anat anatomy(vec3 p) {
   A.u = clamp((a - left) / A.segW * 2.0 - 1.0, -1.0, 1.0);
   A.dS = max(min(a - left, right - a), 0.0) * A.rho;
   float yN = p.y / oShape.y;
-  float coreBase = oLayers.z * (0.34 + 0.45 * yN * yN);
+  float coreBase = oLayers.z * (0.44 + 0.4 * yN * yN);
   float torn = 0.5;
   if (A.rho < coreBase * 2.0) {
     vec2 cs = vec2(cos(A.psi), sin(A.psi));
@@ -213,13 +213,13 @@ float heightRaw(Anat A, Sac s, vec3 p, vec4 plane) {
     return (0.00004 * (sp.y - 0.5) - 0.00012 * sp.x) * fade - 0.00004 * wet + 0.0003 * torn + beadAt(p, plane, wet * 0.8).x;
   }
   if (A.dC < 0.0) {
-    if (lod) return mix(0.00004, 0.00028, 1.0 - smoothstep(-0.0012, 0.0, A.dC));
+    if (lod) return mix(0.00004, 0.00045, 1.0 - smoothstep(-0.0012, 0.0, A.dC));
     vec2 cs = vec2(cos(A.psi), sin(A.psi));
     float fib = vnoise(vec3(cs * 9.0, A.rho * 2600.0) + oNoise.zxy) * 0.6 + vnoise(p * 3000.0 + oNoise.xyz) * 0.4;
     float strands = smoothstep(0.45, 0.9, vnoise(vec3(cs * 23.0, A.rho * 5200.0) + p * 1800.0 + oNoise.yzx));
     float k = 1.0 - smoothstep(-0.0012, 0.0, A.dC);
     vec2 sp = sponge(p, normalize(vec3(p.x, 0.0, p.z) + 1e-7), 1700.0);
-    return mix(0.00004, 0.00008 + 0.00025 * fib + 0.00035 * strands, k) - 0.00025 * sp.x + 0.00006 * (sp.y - 0.5);
+    return mix(0.00004, 0.00012 + 0.0003 * fib + 0.0005 * strands, k) - 0.00012 * sp.x + 0.00006 * (sp.y - 0.5);
   }
   float ph = planeHash(plane);
   float w = clamp(A.depthP / A.pulpD, 0.0, 1.0);
@@ -227,9 +227,10 @@ float heightRaw(Anat A, Sac s, vec3 p, vec4 plane) {
   float rim = 1.0 - smoothstep(0.0, 0.0018, A.depthP);
   if (A.inSeg < 0.0) {
     float thick = smoothstep(0.0, -0.0006, A.inSeg);
-    if (lod) return mix(segBulge * 0.8 - 0.00001, 0.00001 + segBulge * 0.3, thick);
+    if (lod) return mix(segBulge * 0.8 - 0.00001, 0.00001 + segBulge * 0.3 + 0.00025 * (1.0 - smoothstep(0.0015, 0.003, A.dC)), thick);
     vec2 sp = sponge(p, normalize(vec3(p.x, 0.0, p.z) + 1e-7), 1700.0);
-    return mix(segBulge * 0.8 - 0.00001, 0.00004 - 0.00018 * sp.x + 0.00005 * (sp.y - 0.5) + segBulge * 0.3, thick) + beadAt(p, plane, rim).x;
+    float tuft = (1.0 - smoothstep(0.0015, 0.003, A.dC)) * (0.0002 + 0.0004 * smoothstep(0.4, 0.85, vnoise(p * 2400.0 + oNoise.yzx)));
+    return mix(segBulge * 0.8 - 0.00001, 0.00004 - 0.00018 * sp.x + 0.00005 * (sp.y - 0.5) + segBulge * 0.3 + tuft, thick) + beadAt(p, plane, rim).x;
   }
   float h = sacHeight(s, ph, p, w) + segBulge + 0.00012 * rim * (vnoise(p * 700.0 + oNoise.xyz) - 0.3);
   float edge = smoothstep(0.0, 0.0004, A.inSeg);
@@ -358,27 +359,27 @@ Surface cutSurface(SurfaceInput si, vec4 plane, vec3 Nrest, Anat A, Sac sacIn) {
     float holes = smoothstep(0.74, 0.86, pore.x) * (1.0 - smoothstep(0.00008, 0.0003, px));
     float voids = smoothstep(0.6, 0.72, vnoise(p * 1500.0 + oNoise.yxz) * 0.65 + vnoise(p * 4200.0 + oNoise.zyx) * 0.35);
     vec2 spc = sponge(p, normalize(vec3(p.x, 0.0, p.z) + 1e-7), 1700.0);
-    vec3 core = vec3(0.96, 0.94, 0.82) * (0.8 + 0.22 * fib) * (0.9 + 0.16 * spc.y);
+    float fibre = vnoise(vec3(cs.x * 30.0 + A.rho * 9000.0, cs.y * 30.0, p.y * 260.0) + oNoise.xzy);
+    vec3 core = vec3(0.96, 0.94, 0.84) * (0.86 + 0.14 * fib) * (0.92 + 0.12 * fibre);
     float soak = smoothstep(0.25, 0.75, vnoise(vec3(cs.x * 6.0 + A.rho * 2200.0, cs.y * 6.0, p.y * 150.0) + oNoise.yxz) * 0.6 + vnoise(vec3(cs.x * 17.0 + A.rho * 6000.0, cs.y * 17.0, p.y * 400.0) + oNoise.zyx) * 0.4);
-    core = mix(core, vec3(0.92, 0.62, 0.22), smoothstep(0.0, 0.7, soak) * 0.7);
-    core = mix(core, vec3(0.88, 0.62, 0.2), holes * 0.4);
-    core = mix(core, vec3(0.84, 0.72, 0.42), spc.x * 0.6);
-    core = mix(core, oFleshDeep.rgb * vec3(0.85, 0.7, 0.5), voids * 0.7);
-    holes = max(holes, max(voids, spc.x * 0.6));
+    core = mix(core, vec3(0.95, 0.8, 0.5), smoothstep(0.0, 0.7, soak) * 0.35);
+    core = mix(core, vec3(0.93, 0.86, 0.66), max(spc.x, voids) * 0.25);
+    holes = max(holes * 0.3, max(voids, spc.x) * 0.25);
     float hollow = oExtra.w > 0.0 ? 1.0 - smoothstep(0.0, 0.0008, A.rho - oExtra.w * A.coreR) : 0.0;
     core = mix(core, core * vec3(0.75, 0.66, 0.48), hollow);
     albedo = core;
-    rough = mix(0.62, 0.45, fib);
-    clear = 0.1;
+    rough = mix(0.55, 0.38, fib);
+    clear = 0.25;
     gN = pore.yzw * 5200.0 * 0.0000025 * (1.0 - smoothstep(0.00006, 0.0003, px));
-    cavity = mix(1.0, 0.7, holes) * mix(1.0, 0.5, hollow);
-    profile = 2.0; width = 0.35;
+    cavity = mix(1.0, 0.8, holes) * mix(1.0, 0.5, hollow);
+    profile = 2.0; width = 0.55;
     sssColor = vec3(0.95, 0.92, 0.75) * 0.32;
     trans = vec3(0.95, 0.92, 0.75) * vec3(0.22, 0.15, 0.04);
   } else {
     Sac s = sacIn;
     vec3 id = s.id;
     vec3 flesh = fleshBase(w, id);
+    flesh *= vec3(1.0, 1.0 + (id.y - 0.5) * 0.3 * smoothstep(0.00008, 0.0003, px), 1.0);
     vec3 hseg = hash33(vec3(A.fseg + 0.5, 9.5, oRind.w * 7.0));
     flesh *= vec3(0.94 + 0.1 * hseg.x, 0.9 + 0.14 * hseg.y, 1.0);
     float flank = 1.0 - smoothstep(0.0, 0.0022, A.inSeg);
@@ -429,20 +430,20 @@ Surface cutSurface(SurfaceInput si, vec4 plane, vec3 Nrest, Anat A, Sac sacIn) {
     }
     float memK = 1.0 - smoothstep(-0.00002, 0.00012 + px * 0.5, A.inSeg);
     float thick = smoothstep(0.0, -0.0005, A.inSeg);
-    float nearCore = 1.0 - smoothstep(0.0, 0.004, A.dC);
+    float nearCore = 1.0 - smoothstep(0.0015, 0.003, A.dC);
     float crumb = vnoise(p * 2600.0 + oNoise.zxy) * 0.6 + vnoise(p * 7000.0 + oNoise.xyz) * 0.4;
     float cvoid = smoothstep(0.62, 0.74, vnoise(p * 1500.0 + oNoise.yxz) * 0.65 + vnoise(p * 4200.0 + oNoise.zyx) * 0.35) * nearCore;
     vec2 spf = sponge(p, normalize(vec3(p.x, 0.0, p.z) + 1e-7), 1700.0);
-    vec3 fillCol = mix(vec3(0.95, 0.9, 0.66), vec3(0.96, 0.94, 0.82), nearCore) * (0.82 + 0.2 * crumb) * (0.9 + 0.16 * spf.y);
-    fillCol = mix(fillCol, vec3(0.84, 0.72, 0.42), spf.x * 0.6);
-    fillCol = mix(fillCol, oFleshDeep.rgb * vec3(0.9, 0.75, 0.55), cvoid * 0.7);
+    vec3 fillCol = mix(mix(albedo, albedo * vec3(1.05, 1.3, 1.9) + vec3(0.06, 0.06, 0.04), 0.6), vec3(0.96, 0.94, 0.84) * (0.88 + 0.12 * crumb), nearCore);
+    fillCol = mix(fillCol, vec3(0.93, 0.86, 0.66), spf.x * 0.2 * nearCore);
     float seen = smoothstep(0.25, 0.75, vnoise(vec3(A.rho * 600.0, p.y * 600.0, A.fseg * 3.7 + oRind.w)));
     memK *= mix(1.0, 0.75, smoothstep(0.85, 0.4, s.e) * (1.0 - thick));
-    memK *= mix(1.0, 0.15, pow(abs(dot(n, ePsi)), 3.0) * (1.0 - thick));
+    memK *= mix(1.0, 0.15, pow(abs(dot(n, ePsi)), 3.0) * (1.0 - nearCore));
     vec3 memCol = mix(mix(albedo, albedo * vec3(1.05, 1.25, 1.7) + vec3(0.05, 0.05, 0.03), 0.5 + 0.45 * seen), fillCol, thick);
     albedo = mix(albedo, memCol, memK);
     float rupt = step(fract(id.y + ph), 0.2) * step(s.sdf, 0.0);
-    float film = smoothstep(0.7, 0.8, vnoise(p * 2400.0 + id * 31.0 + ph * 9.0) * 0.7 + vnoise(p * 300.0 + oNoise.yxz) * 0.3);
+    float far = smoothstep(0.00008, 0.0003, px);
+    float film = smoothstep(0.7, 0.8, vnoise(p * mix(2400.0, 900.0, far) + id * 31.0 + ph * 9.0) * 0.7 + vnoise(p * 300.0 + oNoise.yxz) * 0.3);
     rough = mix(mix(0.2, 0.035, film), 0.3, wall);
     rough = mix(rough, 0.09, gap * juice * film);
     rough = mix(rough, mix(0.45, 0.55, thick), memK);
@@ -454,7 +455,7 @@ Surface cutSurface(SurfaceInput si, vec4 plane, vec3 Nrest, Anat A, Sac sacIn) {
     rough = mix(rough, max(rough, 0.42), (1.0 - wrinkleK) * (1.0 - film) * (1.0 - gap * juice));
     rough = mix(rough, 0.7, graze);
     clear *= 1.0 - graze;
-    cavity = mix(1.0, 0.9, gap * (1.0 - juice)) * mix(1.0, 0.6, cvoid * memK * thick) * mix(1.0, 0.3, graze);
+    cavity = mix(1.0, 0.9, gap * (1.0 - juice)) * mix(1.0, 0.3, graze);
     profile = memK * thick > 0.5 ? 2.0 : 3.0;
     width = profile > 2.5 ? 0.6 : 0.35;
     sssColor = mix(oFlesh.rgb * 0.5, vec3(0.95, 0.9, 0.62) * 0.32, memK * thick);

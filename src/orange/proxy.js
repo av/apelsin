@@ -2,7 +2,7 @@ import { v3 } from '../math.js';
 import { STRIDE } from './mesh.js';
 
 export const MAX_PLANES = 12;
-export const RELIEF_MARGIN = 0.0012;
+export const RELIEF_MARGIN = 0.0014;
 const INFLATE = 0.0005;
 const DIRECTIONS = 96;
 
