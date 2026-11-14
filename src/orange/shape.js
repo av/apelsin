@@ -278,6 +278,12 @@ export function createShape(seed = 1, opts = {}) {
     return Array.from(faces[f].subarray((j * size + i) * 4, (j * size + i) * 4 + 4));
   };
   const baked = new WeakMap();
+  shape.dispose = (gl) => {
+    const b = baked.get(gl);
+    if (!b) return;
+    for (const t of [b.shape, b.glands, b.relief]) gl.deleteTexture(t.tex);
+    baked.delete(gl);
+  };
   shape.bake = (gl) => {
     if (baked.has(gl)) return baked.get(gl);
     const cube = bakeShapeCube(gl, sample);

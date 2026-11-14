@@ -86,7 +86,7 @@ export function bindPiece(gl, prog, d, eye, textures) {
   set(prog, 'uPlaneCount', piece.planeCount);
   set(prog, 'uBound', [...piece.proxy.centre, piece.proxy.radius + 0.002]);
   set(prog, 'uPieceId', d.pieceId || 1);
-  if (textures) { set(prog, 'uShape', textures.shape); set(prog, 'uGlands', textures.glands); }
+  for (const k in textures) set(prog, k, textures[k]);
   gl.bindVertexArray(d.mesh.vao);
   gl.drawArrays(gl.TRIANGLES, 0, d.mesh.count);
 }

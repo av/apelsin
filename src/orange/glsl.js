@@ -1,3 +1,6 @@
+import { SHAPE_GLSL } from './shape.js';
+import { RIND_GLSL } from './rind-glsl.js';
+
 export const ORANGE_UBO = `
 layout(std140) uniform Orange {
   vec4 oShape;
@@ -23,22 +26,7 @@ layout(std140) uniform Orange {
 `;
 
 export const ORANGE_SHAPE = `
-float orangeShapeRadius(vec3 d) {
-  float a = oShape.x, c = oShape.y;
-  float r = 1.0 / sqrt((d.x * d.x + d.z * d.z) / (a * a) + (d.y * d.y) / (c * c));
-  float lump = 0.0;
-  for (int i = 0; i < 4; i++) lump += oLump[i].w * cos(dot(d, oLump[i].xyz) * oShape2.w + oLumpPhase[i]);
-  float up = max(d.y, 0.0);
-  float shoulder = oShape.z * up * up * (1.0 - up * up) * 4.0;
-  float th = acos(clamp(d.y, -1.0, 1.0));
-  float dip = oShape.w * exp(-(th * th) / (oShape2.x * oShape2.x));
-  float psi = atan(d.z, d.x + 1e-7);
-  float rc = (oShape2.z / a) * (0.8 + 0.2 * cos(5.0 * psi));
-  float calyx = 0.0008 * (1.0 - smoothstep(rc * 0.55, rc, th));
-  float tn = 3.14159265 - th;
-  float navel = oShape2.y * (exp(-(tn * tn) / 0.01) - 0.6 * exp(-(tn * tn) / 0.0012));
-  return r * (1.0 + lump + shoulder) - dip + calyx - navel;
-}
+float orangeShapeRadius(vec3 d) { return shapeAt(normalize(d)).x; }
 vec3 orangeShapePoint(vec3 d) { d = normalize(d); return d * orangeShapeRadius(d); }
 vec3 orangeShapeNormal(vec3 d) {
   vec3 t1 = normalize(abs(d.y) < 0.9 ? cross(d, vec3(0, 1, 0)) : cross(d, vec3(1, 0, 0)));
@@ -114,153 +102,6 @@ Ves vesicleCells(vec3 q) {
   return v;
 }
 float smin(float a, float b, float k) { float h = max(k - abs(a - b), 0.0) / k; return min(a, b) - h * h * k * 0.25; }
-`;
-
-export const ORANGE_RIND = `
-Surface orangeRind(SurfaceInput si) {
-  vec3 p = si.rest;
-  float rl = length(p);
-  vec3 d = p / max(rl, 1e-6);
-  vec3 Nr = normalize(si.restNormal);
-  float a = oShape.x;
-  float th = acos(clamp(d.y, -1.0, 1.0));
-  float tn = 3.14159265 - th;
-  float psi = atan(d.z, d.x + 1e-7);
-  vec3 ePsi = normalize(vec3(-d.z, 0.0, d.x) + vec3(1e-6, 0.0, 0.0));
-  vec3 eTh = normalize(cross(ePsi, d));
-  float px = max(si.pixel, 1e-6);
-  float scale = oGland.x;
-  float fw = px * scale;
-  float detail = 1.0 - smoothstep(0.22, 0.7, fw);
-  float fineDetail = 1.0 - smoothstep(0.3, 0.9, px * 3300.0);
-  vec3 g = vec3(0);
-  float pit = 0.0, ridge = 0.0;
-  Gland c;
-  c.id = vec3(0.5);
-  vec4 peb = noiseD(p * 260.0 + oNoise.yzx);
-  if (detail > 0.0) {
-    c = glandCells(p * scale + oNoise.xyz + peb.yzw * 0.3, d);
-    float e = c.f2 - c.f1;
-    float rp = 0.36 + 0.16 * c.id.y;
-    float x = min(c.t1 * c.t1 / (rp * rp), 1.0);
-    float wallE = 0.05 + 0.05 * c.id.x;
-    float edge = smoothstep(0.0, wallE + 0.12, e);
-    pit = (1.0 - smoothstep(0.25, 1.0, x)) * edge;
-    ridge = 1.0 - smoothstep(0.0, wallE + 0.06, e);
-    float pitDepth = oGland.y * 0.5e-4 * (0.55 + 0.9 * c.id.x);
-    vec3 rt = c.r1 - d * dot(c.r1, d);
-    float sx = clamp((x - 0.25) / 0.75, 0.0, 1.0);
-    g += pitDepth * 6.0 * sx * (1.0 - sx) / 0.75 * 2.0 / (rp * rp) * (-rt) * scale * edge;
-    vec3 gradE = (c.r1 / max(c.f1, 1e-4) - c.r2 / max(c.f2, 1e-4)) * scale;
-    float t = clamp(e / (wallE + 0.12), 0.0, 1.0);
-    g += -pitDepth * (1.0 - smoothstep(0.25, 1.0, x)) * 6.0 * t * (1.0 - t) / (wallE + 0.12) * gradE;
-    g *= detail;
-  }
-  vec4 fine = noiseD(p * 3300.0 + oNoise.zxy);
-  g += fine.yzw * 3300.0 * 0.000018 * fineDetail;
-  g += peb.yzw * 260.0 * oExtra.y;
-  float m1 = vnoise(p * 38.0 + oNoise.yzx), m2 = vnoise(p * 90.0 + oNoise.zxy + 5.0), m3 = vnoise(p * 420.0 + oNoise.xzy);
-  vec3 albedo = oRind.rgb * (1.0 + oGland.z * (m1 - 0.5) * 1.8) * (0.96 + 0.08 * m3);
-  albedo = mix(albedo, min(oRind.rgb * vec3(1.09, 1.5, 3.0), vec3(1.0)), smoothstep(0.35, 0.8, m2) * 0.45);
-  float stemT = 1.0 - smoothstep(0.1, 0.62, th);
-  albedo = mix(albedo, oRindStem.rgb, stemT * stemT * oRindStem.w);
-  float blushMask = oBlush.w > 0.0 ? smoothstep(0.4, 0.75, fbm3(p * 30.0 + oNoise.xzy + 3.0) + 0.25 * d.x) : 0.0;
-  albedo = mix(albedo, oBlush.rgb, blushMask * oBlush.w);
-  float speck = oBlush.w > 0.4 ? step(0.94, c.id.z) * pit * detail * (0.4 + blushMask) : 0.0;
-  albedo = mix(albedo, oBlush.rgb, min(speck, 1.0) * 0.6);
-  albedo *= mix(vec3(1.0), vec3(0.97, 0.93, 0.9), pit * detail);
-  albedo *= 1.0 - 0.04 * (1.0 - detail);
-  float dot1 = step(0.996, c.id.z) * (1.0 - smoothstep(0.12, 0.2, c.t1)) * detail;
-  albedo = mix(albedo, vec3(0.2, 0.08, 0.02), dot1 * 0.7);
-  float scarN = vnoise(vec3(p.x * 160.0, p.y * 900.0, p.z * 160.0) + oNoise.zyx * 1.3);
-  float scar = smoothstep(0.8, 0.86, scarN) * smoothstep(0.62, 0.75, m2);
-  albedo = mix(albedo, albedo * vec3(0.85, 1.15, 2.0) + vec3(0.02, 0.02, 0.01), scar * 0.5);
-  float scuff = smoothstep(0.72, 0.8, fine.x * 0.5 + m3 * 0.5);
-  float rough = mix(0.46, 0.34, ridge * detail);
-  rough = mix(rough, 0.56, pit * detail * 0.6);
-  rough = mix(rough, 0.62, max(scuff * 0.6, scar));
-  rough = mix(rough, 0.52, 1.0 - detail);
-  float clear = oExtra.x * mix(1.0, 0.3, max(scuff, scar));
-  float ccRough = mix(0.13, 0.2, pit * detail) + 0.08 * scuff + 0.08 * (1.0 - detail);
-  float rc = (oShape2.z / a);
-  float cav = 1.0;
-  if (th < rc * 4.2) {
-    float furrowFade = smoothstep(rc * 0.9, rc * 1.4, th) * (1.0 - smoothstep(rc * 2.2, rc * 4.0, th));
-    float fpsi = psi * 6.0 + 1.6 * vnoise(vec3(th * 30.0, psi * 2.0, 1.0) + oNoise.xyz);
-    float furrow = sin(fpsi);
-    g += ePsi * cos(fpsi) * 6.0 / max(rl * sin(th), 1e-4) * 0.00022 * furrowFade * (0.4 + 0.6 * smoothstep(-0.2, 0.8, furrow));
-    float lobePhase = psi * 5.0 + oNoise.x;
-    float lobeId = floor((lobePhase + 3.14159) / 6.28318);
-    float lobe = pow(0.5 + 0.5 * cos(lobePhase), 0.9);
-    float rStar = rc * (0.6 + (0.34 + 0.12 * fract(sin(lobeId * 12.9 + oNoise.y) * 43758.5)) * lobe);
-    float calyx = 1.0 - smoothstep(rStar * 0.92, rStar * 1.04, th);
-    float gap = smoothstep(rStar * 0.95, rStar * 1.05, th) * (1.0 - smoothstep(rStar * 1.05, rStar * 1.3, th)) * (1.0 - smoothstep(rc * 1.2, rc * 1.4, th));
-    float vein = (1.0 - smoothstep(0.0, 0.35, abs(sin(lobePhase * 0.5)))) * calyx;
-    vec3 calyxCol = mix(vec3(0.1, 0.1, 0.012), vec3(0.06, 0.065, 0.012), vnoise(p * 3000.0));
-    calyxCol = mix(calyxCol, vec3(0.09, 0.07, 0.02), smoothstep(0.4, 0.8, vnoise(p * 900.0 + 7.0)) * 0.6);
-    calyxCol = mix(calyxCol, vec3(0.16, 0.15, 0.03), vein * 0.6);
-    calyxCol = mix(calyxCol, vec3(0.14, 0.07, 0.015), smoothstep(0.7, 1.0, th / rStar) * 0.7);
-    g += eTh * (smoothstep(rStar * 0.7, rStar, th) * 2.2 - (1.0 - smoothstep(0.0, rStar * 0.6, th)) * 0.3) * calyx;
-    g += ePsi * sin(lobePhase) * 0.5 * calyx;
-    float excess = rl - orangeShapeRadius(d);
-    float stub = step(0.00025, excess) * (1.0 - step(rc * 0.9, th));
-    vec3 stubSide = mix(vec3(0.1, 0.105, 0.012), vec3(0.16, 0.15, 0.04), vnoise(vec3(psi * 14.0, p.y * 4000.0, 0.0)));
-    float rr = length(p.xz);
-    float ring = smoothstep(0.0003, 0.0006, rr) * (1.0 - smoothstep(0.0008, 0.0011, rr));
-    vec3 stubTop = mix(vec3(0.17, 0.16, 0.035), vec3(0.27, 0.25, 0.08), ring * (0.6 + 0.4 * vnoise(p * 9000.0)));
-    stubTop = mix(stubTop, vec3(0.32, 0.29, 0.14), (1.0 - smoothstep(0.0002, 0.0004, rr)) * 0.5);
-    vec3 stubCol = mix(stubSide, stubTop, smoothstep(0.6, 0.9, Nr.y));
-    float calyxAll = max(calyx, stub);
-    albedo = mix(albedo, calyxCol, calyx);
-    albedo = mix(albedo, albedo * 0.35, gap);
-    albedo = mix(albedo, stubCol, stub);
-    g = mix(g, vec3(0), stub);
-    rough = mix(rough, 0.62, calyxAll);
-    clear = mix(clear, 0.15, calyxAll);
-    cav = mix(1.0, 0.45, gap);
-  }
-  float navelOpen = oExtra.z;
-  if (tn < 0.45 && navelOpen > 0.0) {
-    float folds = smoothstep(navelOpen * 0.9, navelOpen * 1.6, tn) * (1.0 - smoothstep(navelOpen * 1.6, navelOpen * 3.0, tn));
-    float fp = psi * 9.0 + 2.0 * vnoise(vec3(tn * 40.0, psi, 3.0));
-    g += ePsi * cos(fp) * 9.0 / max(rl * sin(tn), 1e-4) * 0.00025 * folds;
-    float hole = 1.0 - smoothstep(navelOpen * 0.75, navelOpen, tn);
-    float lip = smoothstep(navelOpen * 0.7, navelOpen, tn) * (1.0 - smoothstep(navelOpen, navelOpen * 1.25, tn));
-    vec4 crumple = noiseD(vec3(psi * 4.0, tn * 160.0, 0.0) + oNoise.xyz);
-    vec4 crumple2 = noiseD(p * 2600.0 + oNoise.zxy);
-    float crease = smoothstep(0.35, 0.05, abs(crumple.x - 0.5));
-    vec3 inner = oRind.rgb * vec3(1.0, 1.15, 1.2) * (0.7 + 0.35 * crumple2.x);
-    albedo = mix(albedo, mix(inner, inner * 0.35, crease), hole);
-    g += (ePsi * crumple.y * 4.0 / max(rl * sin(tn), 1e-4) + eTh * crumple.z * 160.0 / rl) * 0.0004 * hole + crumple2.yzw * 2600.0 * 0.00003 * hole;
-    g += eTh * 0.6 * lip;
-    cav = min(cav, mix(1.0, mix(0.75, 0.3, crease), hole));
-    rough = mix(rough, 0.55, hole);
-    clear = mix(clear, 0.2, hole);
-  } else if (tn < 0.45) {
-    float scarR = 0.035 + 0.01 * oNoise.y / 100.0;
-    float scarK = 1.0 - smoothstep(scarR * 0.6, scarR, tn);
-    float scarRing = smoothstep(scarR * 0.6, scarR, tn) * (1.0 - smoothstep(scarR, scarR * 1.6, tn));
-    albedo = mix(albedo, vec3(0.25, 0.1, 0.015) * (0.8 + 0.4 * vnoise(p * 4000.0)), scarK * 0.9);
-    albedo *= 1.0 - 0.15 * scarRing;
-    g += -eTh * scarRing * 0.4;
-    rough = mix(rough, 0.68, scarK);
-    clear *= 1.0 - scarK;
-  }
-  Surface s = defaultSurface(vec3(0, 1, 0));
-  vec3 Nrest = perturb(Nr, g, 1.0);
-  s.N = normalize(si.restToWorld * Nrest);
-  s.albedo = clamp(albedo, 0.0, 1.0);
-  s.roughness = rough;
-  s.f0 = vec3(0.035);
-  s.clearcoat = clear;
-  s.clearcoatRoughness = ccRough;
-  s.cavity = mix(1.0, 0.9, pit * detail) * cav;
-  s.sssProfile = 1.0;
-  s.sssWidth = 0.45;
-  s.sssColor = oRind.rgb * vec3(0.35, 0.16, 0.04);
-  s.transmission = oRind.rgb * vec3(0.05, 0.015, 0.0);
-  return s;
-}
 `;
 
 export const ORANGE_INTERIOR = `
@@ -549,9 +390,9 @@ Surface orangeInterior(SurfaceInput si) {
 }
 `;
 
-export const ORANGE_MATERIAL = ORANGE_UBO + ORANGE_SHAPE + ORANGE_RIND + ORANGE_INTERIOR + `
+export const ORANGE_MATERIAL = ORANGE_UBO + SHAPE_GLSL + ORANGE_SHAPE + RIND_GLSL + ORANGE_INTERIOR + `
 Surface materialSurface(SurfaceInput si) {
   if (si.cap > 0.5) return orangeInterior(si);
-  return orangeRind(si);
+  return rindSurface(si);
 }
 `;

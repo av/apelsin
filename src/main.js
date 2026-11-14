@@ -11,6 +11,7 @@ import { createUI } from './ui.js';
 import { runPreset, PRESET_NAMES } from './presets.js';
 import { mulberry32, v3 } from './math.js';
 import { restDirToWorld } from './orange/piece.js';
+import { orangeTextures, rindReady } from './orange/rind.js';
 
 const params = new URLSearchParams(location.search);
 const pick = (key, list, fallback) => (list.includes(params.get(key)) ? params.get(key) : fallback);
@@ -98,9 +99,8 @@ function boot() {
         state.preset = 'whole';
       } else state.seed = seed >>> 0;
       const p = orangeParams(state.variety, state.seed);
-      renderer.setOrange(packOrange(p));
       world.newOrange(p, { tilt: opts.tilt ?? true });
-      renderer.setShape(world.shape);
+      renderer.setOrange(packOrange(world.params), orangeTextures(gl, world.params));
       ui?.sync();
       return world.pieces.length;
     },
@@ -186,7 +186,7 @@ function boot() {
 
   async function loadPhysics() {
     const { createPhysics } = await import('./physics.js');
-    const physics = await createPhysics();
+    const [physics] = await Promise.all([createPhysics(), rindReady(gl)]);
     physics.on('impact', (piece, impulse, other) => {
       const m = piece.body ? piece.body.mass() : 0.1;
       audio.thud(impulse / Math.max(m, 0.005), other === 'piece' ? 'fruit' : app.surfaceAt(piece.position[0], piece.position[2]), m);

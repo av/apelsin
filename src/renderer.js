@@ -11,7 +11,6 @@ import { STRIDE } from './orange/mesh.js';
 import { mat4 } from './math.js';
 import { PIECE_VS, pieceFragment } from './orange/march-glsl.js';
 import { bindPiece } from './orange/piece.js';
-import { bakeGlandCube } from './orange/standin.js';
 
 export const TIERS = {
   low: { name: 'low', index: 0, scale: 0.6, shadow: 1024, ground: 192, ssao: false, aoSamples: 0, aoRadius: 0.04, sss: false, sssTaps: 0, keySamples: 3, taa: false, bloom: false, grainScale: 0.5, dofTaps: 24, dofRadius: 10 },
@@ -50,8 +49,7 @@ export function createRenderer(gl, canvas, { tier = 'high' } = {}) {
     main: program(gl, PIECE_VS, pieceFragment('main'), { label: 'piece-main', defines: gl.caps.floatTargets ? {} : { OUTPUT_SCALE: 0.25 } }),
     shadow: program(gl, PIECE_VS, pieceFragment('shadow'), { label: 'piece-shadow', defines: { SHADOW: 1 } }),
   };
-  let pieceTextures = null;
-  shadows.setPieces({ prog: pieceProgs.shadow, draw: (prog, d, dir) => bindPiece(gl, prog, d, [-dir[0], -dir[1], -dir[2], 0], pieceTextures) });
+  shadows.setPieces({ prog: pieceProgs.shadow, draw: (prog, d, dir) => bindPiece(gl, prog, d, [-dir[0], -dir[1], -dir[2], 0], r.orangeTextures) });
   const materialProgs = {};
   const materialProgram = (name) => materialProgs[name] || (materialProgs[name] = program(gl, UBER_VS, uberFragment(name, 'main'), { label: `material-${name}`, defines: { [`MATERIAL_${name.toUpperCase()}`]: 1, ...(GROUND_RECEIVERS.includes(name) ? { GROUND_RECEIVER: 1 } : {}), ...(gl.caps.floatTargets ? {} : { OUTPUT_SCALE: 0.25 }) } }));
   for (const name of Object.keys(MATERIALS)) materialProgram(name);
@@ -60,7 +58,7 @@ export function createRenderer(gl, canvas, { tier = 'high' } = {}) {
 
   const r = {
     gl, ibl, shadows, post, tier: TIERS[tier], width: 0, height: 0, targets: {}, fbos: {}, scene: null, backdrop: [],
-    exposure: 1, tonemapMode: 'photo', resetHistory: true, stats: { frameMs: 0 }, fleshTint: [1, 0.55, 0.02], rindTint: [1, 0.3, 0.004],
+    exposure: 1, tonemapMode: 'photo', orangeTextures: {}, resetHistory: true, stats: { frameMs: 0 }, fleshTint: [1, 0.55, 0.02], rindTint: [1, 0.3, 0.004],
   };
 
   function resize() {
@@ -116,20 +114,16 @@ export function createRenderer(gl, canvas, { tier = 'high' } = {}) {
     r.resetHistory = true;
   }
 
-  function setShape(shape) {
-    pieceTextures = { shape: shape.bake(gl).texture, glands: bakeGlandCube(gl, shape) };
-    shadows.invalidate();
-  }
-
   function drawPieces(prog, ctx) {
     const eye = [...ctx.camera.eye, 1];
     gl.enable(gl.CULL_FACE);
-    for (const d of ctx.drawables) if (d.march) bindPiece(gl, prog, d, eye, pieceTextures);
+    for (const d of ctx.drawables) if (d.march) bindPiece(gl, prog, d, eye, r.orangeTextures);
     gl.disable(gl.CULL_FACE);
     gl.cullFace(gl.BACK);
   }
 
-  function setOrange(packed) {
+  function setOrange(packed, textures) {
+    if (textures) { r.orangeTextures = textures; shadows.invalidate(); }
     orangeUbo.data.set(packed);
     orangeUbo.upload();
     const tint = (offset) => { const f = Array.from(packed.slice(offset, offset + 3)); const m = Math.max(...f, 1e-3); return f.map((x) => x / m); };
@@ -172,6 +166,7 @@ export function createRenderer(gl, canvas, { tier = 'high' } = {}) {
     set(prog, 'uGroundKey', shadows.groundKey || white);
     set(prog, 'uAO', ctx.ao || white);
     set(prog, 'uWetness', ctx.frame.wetness || black);
+    for (const k in r.orangeTextures) set(prog, k, r.orangeTextures[k]);
   }
 
   function draw(prog, d) {
@@ -197,7 +192,8 @@ export function createRenderer(gl, canvas, { tier = 'high' } = {}) {
         gl.clearBufferfv(gl.COLOR, 1, [0, 0, 0, 0]);
         use(prepassProg);
         for (const d of ctx.drawables) if (!d.march) draw(prepassProg, d);
-        if (pieceTextures) { use(pieceProgs.prepass); drawPieces(pieceProgs.prepass, ctx); }
+        use(pieceProgs.prepass);
+        drawPieces(pieceProgs.prepass, ctx);
       },
     },
     { name: 'ssao', enabled: (ctx) => ctx.tier.ssao, run: (ctx) => post.ssao(ctx) },
@@ -207,7 +203,7 @@ export function createRenderer(gl, canvas, { tier = 'high' } = {}) {
         bind(gl, r.fbos.main);
         gl.clearColor(0, 0, 0, 0);
         gl.clear(gl.COLOR_BUFFER_BIT);
-        if (pieceTextures) {
+        if (ctx.drawables.some((d) => d.march)) {
           bind(gl, r.fbos.pieces);
           gl.disable(gl.DEPTH_TEST);
           const prog = pieceProgs.main;
@@ -307,6 +303,6 @@ export function createRenderer(gl, canvas, { tier = 'high' } = {}) {
     return ctx;
   }
 
-  Object.assign(r, { resize, setTier, setScene, setOrange, setShape, render, passes, materialProgram, frameUbo, orangeUbo });
+  Object.assign(r, { resize, setTier, setScene, setOrange, render, passes, materialProgram, frameUbo, orangeUbo });
   return r;
 }
