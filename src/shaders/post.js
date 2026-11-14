@@ -161,17 +161,15 @@ void main() {
   vec2 texel = uResolution.zw;
   vec3 cur = tm(texture(uCurrent, vUv).rgb);
   vec3 m1 = vec3(0), m2 = vec3(0);
-  vec3 mn = vec3(1e9), mx = vec3(-1e9);
-  float closest = 1.0;
+  float closest = 1.0, farthest = 0.0;
   vec2 closestUv = vUv;
   for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
     vec2 uv = vUv + vec2(x, y) * texel;
     vec3 s = toYCoCg(tm(texture(uCurrent, uv).rgb));
-    float w = (x == 0 || y == 0) ? 1.0 : 0.0;
     m1 += s; m2 += s * s;
-    if (w > 0.5) { mn = min(mn, s); mx = max(mx, s); }
     float d = texture(uDepth, uv).r;
     if (d < closest) { closest = d; closestUv = uv; }
+    farthest = max(farthest, d);
   }
   vec3 mean = m1 / 9.0, sd = sqrt(max(m2 / 9.0 - mean * mean, 0.0));
   float zNow = linearDepth(texture(uDepth, vUv).r);
@@ -188,10 +186,11 @@ void main() {
   vec3 hist = toYCoCg(tm(h.rgb));
   float speed = length(vel * uResolution.xy);
   float zPrev = h.a;
-  float depthJump = abs(zPrev - zNow) / max(zNow, 1e-3);
-  float disoccluded = smoothstep(0.02, 0.08, depthJump - speed * 0.004);
+  float zLo = linearDepth(closest), zHi = linearDepth(farthest);
+  float depthJump = max(zLo - zPrev, zPrev - zHi) / max(zNow, 1e-3);
+  float disoccluded = smoothstep(0.03, 0.1, depthJump - speed * 0.004);
   float gamma = mix(1.25, 0.75, clamp(speed / 4.0, 0.0, 1.0));
-  vec3 lo = max(mean - gamma * sd, mn), hi = min(mean + gamma * sd, mx);
+  vec3 lo = mean - gamma * sd, hi = mean + gamma * sd;
   lo = min(lo, toYCoCg(cur)); hi = max(hi, toYCoCg(cur));
   vec3 center = 0.5 * (hi + lo), extents = 0.5 * (hi - lo) + 1e-4;
   vec3 off = hist - center;
