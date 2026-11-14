@@ -482,23 +482,6 @@ test('presets are deterministic and stay still for 600 more frames', async () =>
   await pageB.close();
 });
 
-test('slow motion runs physics and juice at a quarter speed', async () => {
-  const fall = async (slow) => {
-    const page = await open('seed=12');
-    if (slow) assert.equal(await page.evaluate(() => window.apelsin.toggle('slowmo')), true);
-    await page.evaluate(() => window.apelsin.cut([0, 0.04, 0], [1, 0, 0]));
-    const a = await page.evaluate(() => window.apelsin.poses());
-    const info = await page.evaluate(() => window.apelsin.step(12));
-    const b = await page.evaluate(() => window.apelsin.poses());
-    await page.close();
-    return { move: Math.max(...a.map((p, i) => Math.hypot(...p.position.map((v, k) => v - b[i].position[k])))), info };
-  };
-  const normal = await fall(false), slow = await fall(true);
-  assert.equal(slow.info.slowmo, true);
-  assert.ok(slow.move < normal.move * 0.5, `slow-mo ${slow.move} vs ${normal.move}`);
-  assert.ok(slow.info.droplets > normal.info.droplets, 'juice lingers in the air');
-});
-
 test('on a phone a one-finger swipe slices, two fingers orbit and zoom, the toolbar fits', async () => {
   const page = await openTouch('seed=5');
   await page.evaluate(() => window.apelsin.step(2));
@@ -541,7 +524,7 @@ test('the page has a title, description, social tags and an orange favicon; the 
   assert.ok(meta.description.length > 40);
   assert.ok(meta.og);
   assert.match(meta.icon, /^data:image\/svg\+xml/);
-  assert.ok(meta.tips.includes('Knife · K') && meta.tips.some((t) => /Slow motion/.test(t)));
+  assert.ok(meta.tips.includes('Knife · K') && meta.tips.some((t) => /Macro/.test(t)));
   assert.equal(await page.evaluate(() => document.getElementById('hint').classList.contains('gone')), false);
   await page.evaluate(() => window.apelsin.cut([0, 0.04, 0], [1, 0, 0]));
   assert.equal(await page.evaluate(() => document.getElementById('hint').classList.contains('gone')), false, 'api cuts are not user cuts');
@@ -551,8 +534,6 @@ test('the page has a title, description, social tags and an orange favicon; the 
   for (let i = 1; i <= 10; i++) await page.mouse.move(cx + 10, cy - 200 + i * 40);
   await page.mouse.up();
   assert.equal(await page.evaluate(() => document.getElementById('hint').classList.contains('gone')), true);
-  await page.keyboard.press('t');
-  assert.equal((await page.evaluate(() => window.apelsin.info())).slowmo, true);
   await page.close();
 });
 

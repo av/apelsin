@@ -34,7 +34,7 @@ function boot() {
 
   const state = {
     seed: params.has('seed') ? (parseInt(params.get('seed'), 10) >>> 0) : (Math.random() * 1e9) >>> 0,
-    tool: 'knife', preset: 'whole', macro: false, slowmo: false,
+    tool: 'knife', preset: 'whole', macro: false,
     quality: pick('q', TIER_NAMES, phone ? 'medium' : 'high'), forcedQuality: TIER_NAMES.includes(params.get('q')),
     physicsReady: false,
   };
@@ -83,7 +83,7 @@ function boot() {
       ui?.sync();
       return true;
     },
-    toggle(key) { state[key] = !state[key]; if (key === 'slowmo') audio.setRate(state.slowmo ? 0.6 : 1); ui?.sync(); },
+    toggle(key) { state[key] = !state[key]; ui?.sync(); },
     reset() { app.runPreset('whole'); camera.set({ ...app.scene.camera, fov: 25 * Math.PI / 180 }); },
     cutWith(origin, normal, pieces) {
       const n = world.cut(origin, normal, pieces);
@@ -113,16 +113,15 @@ function boot() {
 
   let time = 0, emaMs = 16.7, slow = 0;
   function frame(dt) {
-    const sim = dt * (state.slowmo ? 0.25 : 1);
     time += dt;
-    tools.update(sim);
-    world.update(sim);
+    tools.update(dt);
+    world.update(dt);
     if (app.followUntil > time && world.pieces.length && !tools.busy) {
       const c = world.bounds().centre, g = camera.goal.target, k = Math.min(1, dt * 1.8);
       camera.goal.target = [g[0] + (c[0] - g[0]) * k, g[1], g[2] + (c[2] - g[2]) * k];
     }
-    juice.update(sim, world.pieces, world.params, world.floorAt);
-    juice.prepare(sim);
+    juice.update(dt, world.pieces, world.params, world.floorAt);
+    juice.prepare(dt);
     audio.rolling(world.pieces.reduce((s, p) => s + (p.contact === 'ground' && p.body && !p.body.isSleeping() ? p.rolling || 0 : 0), 0));
     const b = world.bounds();
     renderer.render({
@@ -192,14 +191,14 @@ function boot() {
       quality: state.quality, fps: Math.round(1000 / emaMs), gpu: gl.caps.gpu, droplets: juice.count, physicsReady: state.physicsReady,
       tool: state.tool, preset: state.preset, awake: app.physics ? app.physics.awake(world.pieces) : 0, errors: gl.errors.slice(),
       width: renderer.width, height: renderer.height, floatTargets: gl.caps.floatTargets,
-      knife: tools.knifeVisible, splats: juice.stats.splats, drips: juice.stats.drips, slowmo: state.slowmo, macro: state.macro,
+      knife: tools.knifeVisible, splats: juice.stats.splats, drips: juice.stats.drips, macro: state.macro,
       muted: audio.muted,
     }),
     poses: () => world.pieces.map((p) => ({ id: p.id, position: p.position.slice(), rotation: p.rotation.slice(), sleeping: p.body ? p.body.isSleeping() : null, caps: p.caps.length, faceUp: p.caps.length ? Math.max(...p.caps.map((c) => restDirToWorld(p, c.normal)[1])) : -1 })),
     project: (p) => camera.project(p, canvas.clientWidth, canvas.clientHeight),
     contacts: () => world.contacts(),
     wetness: () => juice.stats.area,
-    toggle: (key) => { if (!['slowmo', 'macro'].includes(key)) return false; app.toggle(key); return state[key]; },
+    toggle: (key) => { if (key !== 'macro') return false; app.toggle(key); return state[key]; },
     preset: (name) => app.runPreset(name),
     cut: (point, normal) => world.cut(point, normal),
     newOrange: (seed) => { app.newOrange(seed); state.preset = 'whole'; ui.sync(); return world.pieces.length; },

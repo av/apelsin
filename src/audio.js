@@ -26,7 +26,7 @@ const SURFACES = {
 
 export function createAudio() {
   let ctx = null, master = null, dry = null, verb = null, noise = null;
-  let muted = false, rate = 1;
+  let muted = false;
   let lastThud = -1, lastDrip = -1, rnd = Math.random;
   let roll = null;
 
@@ -86,7 +86,6 @@ export function createAudio() {
   function play(buf, gain = 1, at = 0) {
     const src = ctx.createBufferSource();
     src.buffer = buf;
-    src.playbackRate.value = rate;
     const g = ctx.createGain();
     g.gain.value = gain;
     src.connect(g).connect(dry);
@@ -171,7 +170,6 @@ export function createAudio() {
     get muted() { return muted; },
     get context() { return ctx; },
     setMuted(m) { muted = m; if (master) master.gain.setTargetAtTime(m ? 0 : 0.9, ctx.currentTime, 0.02); },
-    setRate(r) { rate = r; },
     slice({ area = 0.004, pieces = 1, surface = 'paper' } = {}) {
       if (!ready()) return;
       const body = Math.min(0.55, 0.09 + Math.sqrt(area) * 3.4) * Math.min(1.6, 0.8 + pieces * 0.2);

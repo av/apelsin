@@ -28,7 +28,6 @@ export function createUI(app, { test = false } = {}) {
   $$('[data-preset]').forEach((b) => b.addEventListener('click', () => app.runPreset(b.dataset.preset)));
   $('#new').addEventListener('click', () => app.newOrange());
   $('#macro').addEventListener('click', () => app.toggle('macro'));
-  $('#slowmo').addEventListener('click', () => app.toggle('slowmo'));
   $('#sound').addEventListener('click', toggleSound);
   $('#shot').addEventListener('click', () => app.download());
   document.addEventListener('pointerdown', () => app.audio.unlock(), { once: true, capture: true });
@@ -52,7 +51,6 @@ export function createUI(app, { test = false } = {}) {
     else if (k === 'n') app.newOrange();
     else if (k === 'r') app.reset();
     else if (k === 'm') app.toggle('macro');
-    else if (k === 't') app.toggle('slowmo');
     else if (k === 'a') toggleSound();
     else if (k === 'p') app.download();
     else return;
@@ -63,7 +61,7 @@ export function createUI(app, { test = false } = {}) {
     const s = app.state;
     $$('[data-tool]').forEach((b) => { b.classList.toggle('on', b.dataset.tool === s.tool); b.setAttribute('aria-pressed', b.dataset.tool === s.tool); });
     $$('[data-preset]').forEach((b) => { b.classList.toggle('on', b.dataset.preset === s.preset); b.setAttribute('aria-pressed', b.dataset.preset === s.preset); });
-    for (const id of ['macro', 'slowmo']) { $(`#${id}`).classList.toggle('on', s[id]); $(`#${id}`).setAttribute('aria-pressed', s[id]); }
+    for (const id of ['macro']) { $(`#${id}`).classList.toggle('on', s[id]); $(`#${id}`).setAttribute('aria-pressed', s[id]); }
     $('#sound .wave').style.display = app.audio.muted ? 'none' : '';
     $('#sound .mute').style.display = app.audio.muted ? '' : 'none';
     $('#sound').setAttribute('aria-pressed', !app.audio.muted);
