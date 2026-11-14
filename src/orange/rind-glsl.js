@@ -47,11 +47,11 @@ Surface rindSurface(SurfaceInput si) {
   s.roughness = sqrt(sqrt(r4 + var));
   s.f0 = vec3(0.015);
   float calyx = smoothstep(0.00004, 0.0001, relief);
-  float wax = (1.0 - smoothstep(0.5, 0.7, rough)) * (1.0 - calyx);
-  float cr = 0.1 + 0.12 * smoothstep(0.45, 0.65, rough);
+  float wax = (1.0 - smoothstep(0.52, 0.7, rough)) * (1.0 - calyx);
+  float cr = 0.065 + 0.14 * smoothstep(0.45, 0.65, rough);
   s.clearcoat = wax;
-  s.clearcoatRoughness = sqrt(sqrt(cr * cr * cr * cr + var * 0.8));
-  s.cavity = 1.0 - 0.1 * smoothstep(0.48, 0.62, rough) * (1.0 - calyx);
+  s.clearcoatRoughness = sqrt(sqrt(cr * cr * cr * cr + var * 0.35));
+  s.cavity = 1.0 - 0.45 * smoothstep(0.5, 0.68, rough) * (1.0 - calyx);
   s.sssProfile = 1.0;
   s.sssWidth = 0.45;
   s.sssColor = albedo * vec3(0.35, 0.16, 0.04) * (1.0 - calyx);
