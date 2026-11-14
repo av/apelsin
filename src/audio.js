@@ -170,7 +170,7 @@ export function createAudio() {
     get muted() { return muted; },
     get context() { return ctx; },
     setMuted(m) { muted = m; if (master) master.gain.setTargetAtTime(m ? 0 : 0.9, ctx.currentTime, 0.02); },
-    slice({ area = 0.004, pieces = 1, surface = 'paper' } = {}) {
+    slice({ area = 0.004, pieces = 1 } = {}) {
       if (!ready()) return;
       const body = Math.min(0.55, 0.09 + Math.sqrt(area) * 3.4) * Math.min(1.6, 0.8 + pieces * 0.2);
       const dur = body + 0.25;
@@ -181,7 +181,7 @@ export function createAudio() {
         squelch(out, sr, 0.012, body, 0.55, 90 + area * 20000);
         crackle(out, sr, body - 0.04, body + 0.01, 220, 0.75);
         mode(out, sr, 0.01, 140, 0.05, 0.25, -0.3);
-        impactInto(out, sr, body + 0.005, surface, 0.45);
+        impactInto(out, sr, body + 0.005, 'paper', 0.45);
       }, 0.55);
       play(buf);
     },
@@ -199,21 +199,21 @@ export function createAudio() {
       }, 0.45);
       play(buf, Math.pow(strength, 1.2) * 1.7);
     },
-    rolling(speed, surface = 'paper') {
+    rolling(speed) {
       if (!ctx || ctx.state !== 'running') return;
       if (!roll && speed < 0.01) return;
       const r = ensureRoll();
-      const s = SURFACES[surface] || SURFACES.paper;
+      const s = SURFACES.paper;
       const target = muted ? 0 : Math.min(0.5, speed * 2.2) * (0.75 + 0.5 * Math.random());
       r.g.gain.setTargetAtTime(target, ctx.currentTime, 0.04);
       r.bp.frequency.setTargetAtTime(s.roll[0] * (0.85 + Math.min(0.6, speed * 4)), ctx.currentTime, 0.05);
     },
-    drip(speed = 1, r = 0.001, surface = 'paper') {
+    drip(speed = 1, r = 0.001) {
       if (!ready() || r < 0.0006) return;
       const now = ctx.currentTime;
       if (now - lastDrip < 0.045) return;
       lastDrip = now;
-      const soft = surface === 'paper' ? 0.5 : 1;
+      const soft = 0.5;
       const size = Math.min(1, r / 0.002);
       const buf = synth(0.08, (out, sr) => {
         burst(out, sr, 0, 0.004, 0.6, 'bandpass', 2500 + 2000 * (1 - size), 1.2, 0.0003);
