@@ -1,6 +1,9 @@
 import { v3 } from '../math.js';
 import { STRIDE } from './mesh.js';
 
+let nextCap = 1;
+const SPACING = 0.0018;
+
 class Sink {
   constructor(cap) { this.data = new Float32Array(cap * STRIDE); this.n = 0; }
   push(src, k) {
@@ -8,7 +11,7 @@ class Sink {
     for (let c = 0; c < STRIDE; c++) this.data[this.n * STRIDE + c] = src[k + c];
     this.n++;
   }
-  mesh() { return { data: this.data.slice(0, this.n * STRIDE), count: this.n }; }
+  mesh(extra) { return { data: this.data.slice(0, this.n * STRIDE), count: this.n, ...extra }; }
 }
 
 function lerpVertex(src, a, b, t, out) {
@@ -63,16 +66,78 @@ export function slicePiece(mesh, point, normal) {
   const flat = cut.map((p) => { const d = v3.sub(p, point); return [v3.dot(d, u), v3.dot(d, w), p]; });
   const hull = convexHull2D(flat);
   if (hull.length < 3) return null;
-  let cx = 0, cy = 0;
-  for (const h of hull) { cx += h[0]; cy += h[1]; }
-  cx /= hull.length; cy /= hull.length;
-  const centre = v3.add(point, v3.add(v3.scale(u, cx), v3.scale(w, cy)));
-  const vert = (p, nn) => new Float32Array([p[0], p[1], p[2], nn[0], nn[1], nn[2], 1]);
-  const mn = v3.scale(n, -1);
+  let ax = 0, ay = 0, area = 0;
   for (let i = 0; i < hull.length; i++) {
-    const a = hull[i][2], b = hull[(i + 1) % hull.length][2];
-    neg.push(vert(centre, n), 0); neg.push(vert(a, n), 0); neg.push(vert(b, n), 0);
-    pos.push(vert(centre, mn), 0); pos.push(vert(b, mn), 0); pos.push(vert(a, mn), 0);
+    const [x0, y0] = hull[i], [x1, y1] = hull[(i + 1) % hull.length];
+    const c = x0 * y1 - x1 * y0;
+    area += c; ax += (x0 + x1) * c; ay += (y0 + y1) * c;
   }
-  return [pos.mesh(), neg.mesh()];
+  const centre = v3.add(point, v3.add(v3.scale(u, ax / (3 * area)), v3.scale(w, ay / (3 * area))));
+  const negId = nextCap++, posId = nextCap++;
+  const d = v3.dot(n, point);
+  const planes = { ...(mesh.planes || {}), [negId]: [...n, d], [posId]: [-n[0], -n[1], -n[2], -d] };
+  const grid = capGrid(hull.map((h) => h[2]), centre);
+  emitCap(neg, grid, n, negId);
+  emitCap(pos, grid, v3.scale(n, -1), posId);
+  return [pos.mesh({ planes, params: mesh.params }), neg.mesh({ planes, params: mesh.params })];
+}
+
+function capGrid(boundary, centre) {
+  const N = boundary.length;
+  const len = [0];
+  for (let i = 0; i < N; i++) len.push(len[i] + v3.len(v3.sub(boundary[(i + 1) % N], boundary[i])));
+  const perimeter = len[N];
+  const along = (u) => {
+    const s = u * perimeter;
+    let i = 0;
+    while (i < N - 1 && len[i + 1] < s) i++;
+    const t = (s - len[i]) / Math.max(len[i + 1] - len[i], 1e-12);
+    return v3.add(boundary[i], v3.scale(v3.sub(boundary[(i + 1) % N], boundary[i]), t));
+  };
+  let reach = 0;
+  for (const b of boundary) reach = Math.max(reach, v3.len(v3.sub(b, centre)));
+  const K = Math.min(Math.max(Math.ceil(reach / SPACING), 3), 60);
+  const verts = [{ p: centre }];
+  const rings = [[0]];
+  for (let k = 1; k <= K; k++) {
+    const t = k / K, ring = [];
+    if (k === K) {
+      for (let i = 0; i < N; i++) { ring.push(verts.length); verts.push({ p: boundary[i], u: len[i] / perimeter }); }
+    } else {
+      const m = Math.max(6, Math.round((perimeter * t) / SPACING));
+      for (let j = 0; j < m; j++) {
+        const h = along(j / m);
+        ring.push(verts.length);
+        verts.push({ p: v3.add(centre, v3.scale(v3.sub(h, centre), t)), u: j / m });
+      }
+    }
+    rings.push(ring);
+  }
+  const tris = [];
+  for (let j = 0; j < rings[1].length; j++) tris.push(0, rings[1][j], rings[1][(j + 1) % rings[1].length]);
+  for (let k = 1; k < K; k++) {
+    const A = rings[k], B = rings[k + 1], m = A.length, nB = B.length;
+    const ua = (i) => (i >= m ? 1 : verts[A[i]].u), ub = (j) => (j >= nB ? 1 : verts[B[j]].u);
+    let i = 0, j = 0;
+    while (i < m || j < nB) {
+      if (j >= nB || (i < m && ua(i + 1) <= ub(j + 1))) { tris.push(A[i % m], A[(i + 1) % m], B[j % nB]); i++; }
+      else { tris.push(A[i % m], B[(j + 1) % nB], B[j % nB]); j++; }
+    }
+  }
+  return { verts, tris };
+}
+
+function emitCap(sink, grid, outward, id) {
+  const { verts, tris } = grid;
+  const out = new Float32Array(STRIDE);
+  for (let t = 0; t < tris.length; t += 3) {
+    let a = tris[t], b = tris[t + 1], c = tris[t + 2];
+    const f = v3.cross(v3.sub(verts[b].p, verts[a].p), v3.sub(verts[c].p, verts[a].p));
+    if (v3.dot(f, outward) < 0) { const tmp = b; b = c; c = tmp; }
+    for (const k of [a, b, c]) {
+      const p = verts[k].p;
+      out[0] = p[0]; out[1] = p[1]; out[2] = p[2]; out[3] = outward[0]; out[4] = outward[1]; out[5] = outward[2]; out[6] = id;
+      sink.push(out, 0);
+    }
+  }
 }
