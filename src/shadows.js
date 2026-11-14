@@ -104,7 +104,7 @@ void main() {
   outKey = vec4(wsum > 0.0 ? key / wsum : vec3(1.0), 1.0);
 }`;
 
-export function createShadows(gl, initialSize) {
+export function createShadows(gl, initialSize, initialGround = 384) {
   const prog = program(gl, UBER_VS, uberFragment(null, 'shadow'), { label: 'shadow', defines: { SHADOW: 1 } });
   const floats = gl.caps.floatTargets;
   const extentProg = floats ? program(gl, EXTENT_VS, EXTENT_FS, { label: 'shadow-extent' }) : null;
@@ -112,7 +112,7 @@ export function createShadows(gl, initialSize) {
   const backFormat = gl.caps.halfBlend ? { internal: gl.R32F, format: gl.RED, type: gl.FLOAT } : { internal: gl.R16F, format: gl.RED, type: gl.HALF_FLOAT };
   let map = null, back = null, height = null, ground = null, groundSize = 0, keySamples = 5;
 
-  function allocate(size) {
+  function allocate(size, gs) {
     if (map) { gl.deleteFramebuffer(map.fb); gl.deleteTexture(map.depth.tex); }
     const tex = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, tex);
@@ -126,7 +126,6 @@ export function createShadows(gl, initialSize) {
     if (floats) {
       if (back) { gl.deleteFramebuffer(back.fb); gl.deleteTexture(back.colors[0].tex); }
       back = fbo(gl, [target(gl, size >> 1, size >> 1, backFormat, { filter: gl.NEAREST })]);
-      const gs = size >= 4096 ? 768 : size >= 2048 ? 512 : 256;
       if (gs !== groundSize) {
         if (height) { gl.deleteFramebuffer(height.fb); gl.deleteTexture(height.colors[0].tex); gl.deleteFramebuffer(ground.fb); ground.colors.forEach((c) => gl.deleteTexture(c.tex)); }
         height = fbo(gl, [target(gl, gs, gs, { internal: gl.RG16F, format: gl.RG, type: gl.HALF_FLOAT }, { filter: gl.NEAREST })]);
@@ -135,7 +134,7 @@ export function createShadows(gl, initialSize) {
       }
     }
   }
-  allocate(initialSize);
+  allocate(initialSize, initialGround);
 
   const state = { viewProj: mat4.create(), extent: 0.1, range: 1, size: initialSize, ground: [0, 0, 1, 0], groundReady: false, groundReach: 0.1 };
 
@@ -177,7 +176,17 @@ export function createShadows(gl, initialSize) {
     }
   }
 
+  let lastSignature = '';
+  function signature(drawables) {
+    let sig = `${map.size}|${state.viewProj.join(',')}|${state.ground.join(',')}|${keySamples}|${state.key?.dir.join(',')}|${state.leak?.strength}|${state.leak?.tint.join(',')}`;
+    for (const d of drawables) if (d.castShadow) sig += `|${d.mesh.count}:${Array.prototype.join.call(d.model, ',')}`;
+    return sig;
+  }
+
   function render(drawables) {
+    const sig = signature(drawables);
+    if (sig === lastSignature) return;
+    lastSignature = sig;
     bind(gl, map);
     gl.enable(gl.DEPTH_TEST);
     gl.depthFunc(gl.LESS);
@@ -224,7 +233,8 @@ export function createShadows(gl, initialSize) {
     set keySamples(n) { keySamples = n; },
     get hasBack() { return !!back; },
     get size() { return map.size; },
-    resize(size) { if (size !== map.size) { allocate(size); state.size = size; } },
+    resize(size, gs = groundSize) { if (size !== map.size || gs !== groundSize) { allocate(size, gs); state.size = size; } lastSignature = ''; },
+    invalidate() { lastSignature = ''; },
     fit, fitGround, render,
   };
 }

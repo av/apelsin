@@ -154,15 +154,18 @@ vec3 keyShadow(vec3 world, vec3 N) {
   float searchWorld = tanA * min(sc.z * range, 0.08);
   float search = clamp(searchWorld / (2.0 * extent), texel * 2.0, 0.3);
   float blockers = 0.0, count = 0.0;
+  int tier = int(uFlags.x + 0.5);
+  int searchTaps = tier >= 2 ? 16 : 8;
   for (int i = 0; i < 16; i++) {
-    float d = texture(uShadowMap, sc.xy + rot * POISSON[i] * search).r;
+    if (i >= searchTaps) break;
+    float d = texture(uShadowMap, sc.xy + rot * POISSON[i * (16 / searchTaps)] * search).r;
     if (d < sc.z - 0.0003) { blockers += d; count += 1.0; }
   }
   if (count < 0.5) return vec3(1.0);
   float zb = blockers / count;
   float penWorld = (sc.z - zb) * range * tanA;
   float pen = clamp(penWorld / (2.0 * extent), texel * 1.5, 0.3);
-  int taps = int(uFlags.x) >= 2 ? 32 : 16;
+  int taps = tier >= 3 ? 32 : tier == 2 ? 24 : tier == 1 ? 12 : 8;
   vec3 lit = vec3(0.0);
   for (int i = 0; i < 32; i++) {
     if (i >= taps) break;
@@ -268,11 +271,12 @@ void shadeSurface(Surface s, SurfaceInput si, out vec3 diffuse, out vec3 specula
   if (s.clearcoat > 0.0) {
     float cr = clamp(s.clearcoatRoughness, 0.02, 1.0);
     vec3 ccSingle;
-    vec3 ccColor = specularLobe(s.f0.g <= 0.03 ? s.f0 : vec3(0.04), cr, NoV, ccSingle) * s.clearcoat;
+    bool film = s.f0.g <= 0.03;
+    vec3 ccColor = specularLobe(film ? s.f0 : vec3(0.04), cr, NoV, ccSingle) * s.clearcoat;
     vec3 cc = (envSpec(uEnvCube, R, cr) * envI * specAO + envSpec(uKeyCube, R, cr) * keyI * shadow * horizon) * ccColor;
     vec3 attenuation = 1.0 - ccSingle * s.clearcoat;
-    diffuse *= attenuation;
-    specular = specular * attenuation + cc;
+    diffuse *= film ? 1.0 - (ccSingle - single) * s.clearcoat : attenuation;
+    specular = specular * (film ? vec3(1.0 - s.clearcoat) : attenuation) + cc;
   }
   specular += s.emission;
 }

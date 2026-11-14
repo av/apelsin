@@ -77,9 +77,9 @@ float knifeScores(vec2 p, float px) {
   float m = 0.0;
   for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
     vec2 id = c + vec2(i, j);
-    for (int k = 0; k < 3; k++) {
+    for (int k = 0; k < 2; k++) {
       vec3 h = hash33(vec3(id, float(k) + 5.0));
-      if (h.z < 0.3) continue;
+      if (h.z < 0.2) continue;
       vec2 o = (id + h.xy) * cell;
       float family = step(0.75, fract(h.z * 3.7));
       float ang = (h.x - 0.5) * 0.9 + family * 1.5708 + 0.35;
@@ -120,7 +120,7 @@ Surface materialSurface(SurfaceInput si) {
   float edge = stripW * 0.5 - abs(lz);
   col *= 1.0 - 0.2 * (1.0 - smoothstep(0.0, 0.0003 + px, edge));
   float top = step(0.5, s.N.y);
-  float scores = knifeScores(w.xz, px) * top;
+  float scores = top > 0.5 && px < 0.0015 ? knifeScores(w.xz, px) * (1.0 - smoothstep(0.0006, 0.0015, px)) : 0.0;
   float wear = (1.0 - smoothstep(0.02, 0.2, length(w.xz * vec2(0.9, 1.3)))) * (0.5 + 0.5 * fbm3(w * 45.0)) * top;
   col = mix(col, col * vec3(1.15, 1.12, 1.08) + 0.015, wear * 0.35);
   col = mix(col, col * vec3(1.25, 1.2, 1.12) + 0.03, scores * 0.6);
@@ -139,6 +139,19 @@ Surface materialSurface(SurfaceInput si) {
 `;
 
 const COUNTER = `
+vec4 voronoi2(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  float f1 = 9.0, f2 = 9.0;
+  vec2 id = vec2(0);
+  for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
+    vec2 g = vec2(x, y);
+    vec2 h = hash33(vec3(i + g, 3.0)).xy;
+    vec2 r = g + h - f;
+    float d = dot(r, r);
+    if (d < f1) { f2 = f1; f1 = d; id = h; } else if (d < f2) f2 = d;
+  }
+  return vec4(sqrt(f1), sqrt(f2), id);
+}
 vec3 terrazzoChip(vec3 id) {
   float k = id.y;
   return k < 0.35 ? vec3(0.82, 0.8, 0.76) : k < 0.6 ? vec3(0.3, 0.3, 0.29) : k < 0.75 ? vec3(0.52, 0.24, 0.11) : k < 0.88 ? vec3(0.045, 0.045, 0.045) : vec3(0.42, 0.46, 0.4);
@@ -154,11 +167,12 @@ Surface materialSurface(SurfaceInput si) {
   for (int i = 0; i < 3; i++) {
     float scale = i == 0 ? 55.0 : i == 1 ? 140.0 : 380.0;
     float detail = 1.0 - smoothstep(0.2, 0.7, px * scale);
-    Cell c = voronoi3(vec3(w.xz * scale, float(i) * 7.3), 1.0);
-    float keep = step(i == 0 ? 0.72 : i == 1 ? 0.55 : 0.45, c.id.x);
-    float chip = (1.0 - smoothstep(0.1, 0.1 + px * scale * 2.0 + 0.04, c.f2 - c.f1 - 0.18 - 0.2 * c.id.z)) ;
-    chip = (1.0 - chip) * keep;
-    vec3 cc = terrazzoChip(c.id) * (0.9 + 0.2 * c.id.z);
+    if (detail <= 0.0) continue;
+    vec4 c = voronoi2(w.xz * scale + float(i) * 17.3);
+    vec3 cid = vec3(c.zw, fract(c.z * 7.7 + c.w * 3.1));
+    float keep = step(i == 0 ? 0.72 : i == 1 ? 0.55 : 0.45, cid.x);
+    float chip = smoothstep(0.1, 0.1 + px * scale * 2.0 + 0.04, c.y - c.x - 0.18 - 0.2 * cid.z) * keep;
+    vec3 cc = terrazzoChip(cid) * (0.9 + 0.2 * cid.z);
     col = mix(col, mix(cc, col, 1.0 - detail * 0.85), chip);
   }
   s.albedo = col;

@@ -11,10 +11,10 @@ import { STRIDE } from './orange/mesh.js';
 import { mat4 } from './math.js';
 
 export const TIERS = {
-  low: { name: 'low', index: 0, scale: 0.6, shadow: 1024, ssao: false, aoSamples: 0, aoRadius: 0.04, sss: false, sssTaps: 0, keySamples: 3, taa: false, bloom: false, grainScale: 0.5, dofTaps: 24, dofRadius: 10 },
-  medium: { name: 'medium', index: 1, scale: 0.75, shadow: 2048, ssao: true, aoSamples: 8, aoRadius: 0.03, sss: true, sssTaps: 7, keySamples: 4, taa: true, bloom: true, sharpen: 0.25, dofTaps: 32, dofRadius: 14 },
-  high: { name: 'high', index: 2, scale: 1, shadow: 2048, ssao: true, aoSamples: 12, aoRadius: 0.03, sss: true, sssTaps: 11, keySamples: 5, taa: true, bloom: true, sharpen: 0.2, dofTaps: 48, dofRadius: 18 },
-  ultra: { name: 'ultra', index: 3, scale: 1, shadow: 4096, ssao: true, aoSamples: 16, aoRadius: 0.03, sss: true, sssTaps: 16, keySamples: 7, taa: true, bloom: true, sharpen: 0.2, dofTaps: 64, dofRadius: 22 },
+  low: { name: 'low', index: 0, scale: 0.6, shadow: 1024, ground: 192, ssao: false, aoSamples: 0, aoRadius: 0.04, sss: false, sssTaps: 0, keySamples: 3, taa: false, bloom: false, grainScale: 0.5, dofTaps: 24, dofRadius: 10 },
+  medium: { name: 'medium', index: 1, scale: 0.75, shadow: 2048, ground: 256, ssao: true, aoSamples: 8, aoRadius: 0.03, sss: true, sssTaps: 7, keySamples: 3, taa: true, bloom: true, sharpen: 0.25, dofTaps: 14, dofRadius: 14 },
+  high: { name: 'high', index: 2, scale: 1, shadow: 2048, ground: 512, ssao: true, aoSamples: 12, aoRadius: 0.03, sss: true, sssTaps: 11, keySamples: 5, taa: true, bloom: true, sharpen: 0.2, dofTaps: 32, dofRadius: 18 },
+  ultra: { name: 'ultra', index: 3, scale: 1, shadow: 4096, ground: 768, ssao: true, aoSamples: 16, aoRadius: 0.03, sss: true, sssTaps: 16, keySamples: 7, taa: true, bloom: true, sharpen: 0.2, dofTaps: 48, dofRadius: 22 },
 };
 export const TIER_NAMES = Object.keys(TIERS);
 
@@ -39,7 +39,7 @@ export function createRenderer(gl, canvas, { tier = 'high' } = {}) {
   const frameUbo = ubo(gl, 'Frame', FRAME_UBO_FLOATS);
   const orangeUbo = ubo(gl, 'Orange', ORANGE_UBO_FLOATS);
   const ibl = createIBL(gl);
-  const shadows = createShadows(gl, TIERS[tier].shadow);
+  const shadows = createShadows(gl, TIERS[tier].shadow, TIERS[tier].ground);
   const post = createPost(gl);
   const prepassProg = program(gl, UBER_VS, uberFragment(null, 'prepass'), { label: 'prepass' });
   const materialProgs = {};
@@ -85,7 +85,7 @@ export function createRenderer(gl, canvas, { tier = 'high' } = {}) {
 
   function setTier(name) {
     r.tier = TIERS[name] || TIERS.high;
-    shadows.resize(r.tier.shadow);
+    shadows.resize(r.tier.shadow, r.tier.ground);
     r.width = 0;
     resize();
   }
@@ -93,6 +93,7 @@ export function createRenderer(gl, canvas, { tier = 'high' } = {}) {
   function setScene(scene) {
     r.scene = scene;
     ibl.bake(scene.env);
+    shadows.invalidate();
     for (const b of r.backdrop) b.mesh.dispose();
     r.backdrop = scene.backdrop.map((b) => {
       const data = b.data();
@@ -210,8 +211,8 @@ export function createRenderer(gl, canvas, { tier = 'high' } = {}) {
         gl.disable(gl.DEPTH_TEST);
       },
     },
+    { name: 'dof', enabled: (ctx) => ctx.dof && (ctx.frame.macro || ctx.tier.index >= 2), run: (ctx) => post.dof(ctx) },
     { name: 'taa', enabled: (ctx) => ctx.tier.taa, run: (ctx) => post.taa(ctx) },
-    { name: 'dof', enabled: (ctx) => ctx.dof, run: (ctx) => post.dof(ctx) },
     { name: 'bloom', enabled: (ctx) => ctx.tier.bloom, run: (ctx) => post.bloom(ctx) },
     { name: 'tonemap', run: (ctx) => { if (r.debugTexture) { ctx.color = r.debugTexture(); ctx.bloom = null; } post.tonemap(ctx); } },
   ];
