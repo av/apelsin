@@ -147,7 +147,7 @@ Surface orangeRind(SurfaceInput si) {
     float edge = smoothstep(0.0, wallE + 0.12, e);
     pit = (1.0 - smoothstep(0.25, 1.0, x)) * edge;
     ridge = 1.0 - smoothstep(0.0, wallE + 0.06, e);
-    float pitDepth = oGland.y * 0.6e-4 * (0.55 + 0.9 * c.id.x);
+    float pitDepth = oGland.y * 0.5e-4 * (0.55 + 0.9 * c.id.x);
     vec3 rt = c.r1 - d * dot(c.r1, d);
     float sx = clamp((x - 0.25) / 0.75, 0.0, 1.0);
     g += pitDepth * 6.0 * sx * (1.0 - sx) / 0.75 * 2.0 / (rp * rp) * (-rt) * scale * edge;
@@ -168,7 +168,7 @@ Surface orangeRind(SurfaceInput si) {
   albedo = mix(albedo, oBlush.rgb, blushMask * oBlush.w);
   float speck = oBlush.w > 0.4 ? step(0.82, c.id.z) * pit * detail * (0.4 + blushMask) : 0.0;
   albedo = mix(albedo, oBlush.rgb * 0.8, min(speck, 1.0));
-  albedo *= mix(vec3(1.0), vec3(0.93, 0.88, 0.85), pit * detail);
+  albedo *= mix(vec3(1.0), vec3(0.95, 0.91, 0.88), pit * detail);
   albedo *= 1.0 - 0.04 * (1.0 - detail);
   float dot1 = step(0.996, c.id.z) * (1.0 - smoothstep(0.12, 0.2, c.t1)) * detail;
   albedo = mix(albedo, vec3(0.2, 0.08, 0.02), dot1 * 0.7);
@@ -293,7 +293,7 @@ Surface orangeInterior(SurfaceInput si) {
   float coreBase = oLayers.z * (0.75 + 0.6 * yN * yN);
   float torn = vnoise(vec3(psi * 3.0, p.y * 260.0, rho * 400.0) + oNoise.xyz);
   float coreR = coreBase * (0.78 + 0.5 * torn);
-  float wave = oSeg.y * sin(p.y * 95.0 + rho * 160.0 + oNoise.x) + oSeg.y * 1.4 * (vnoise(p * 140.0 + oNoise.xyz) - 0.5);
+  float wave = (oSeg.y * sin(p.y * 70.0 + rho * 110.0 + oNoise.x) + oSeg.y * 1.2 * (vnoise(p * 55.0 + oNoise.xyz) - 0.5)) * smoothstep(0.0, 0.012, rho);
   int seg; float rel, segW, edge;
   orangeSegment(psi + wave, seg, rel, segW, edge);
   float fseg = float(seg);
@@ -331,7 +331,7 @@ Surface orangeInterior(SurfaceInput si) {
     float f1 = min(v.f1, 1.2);
     float wallW = 0.05 + vfw * 0.9;
     float wallVar = smoothstep(0.25, 0.75, vnoise(q * vec3(1.2, 4.0, 4.0) + 17.0));
-    float wallLine = (1.0 - smoothstep(wallW * 0.25, wallW, v.f2 - v.f1)) * min(0.05 / wallW * 1.6, 1.0) * (0.15 + 0.85 * wallVar);
+    float wallLine = (1.0 - smoothstep(wallW * 0.25, wallW, v.f2 - v.f1)) * min(0.05 / wallW * 1.2, 1.0) * (0.15 + 0.85 * wallVar);
     wallK = wallLine * vdetail;
     float domeD = inversesqrt(max(1.0 - min(f1 * f1, 1.0), 0.04));
     vec3 gq = v.m / (v.k * vec3(1.0, v.taper, v.taper)) * domeD;
@@ -388,10 +388,12 @@ Surface orangeInterior(SurfaceInput si) {
     ccRough = mix(ccRough, 0.01, bead);
     cavity = mix(1.0, 0.85, wallK);
   }
+  float halo = (1.0 - smoothstep(memW, memW + 0.0006 + px, segD)) * (1.0 - step(segD, memW * 0.4));
+  albedo = mix(albedo, mix(albedo, oFleshWall.rgb, 0.6), halo * 0.6);
   float segFlesh = smoothstep(memW * 0.4, memW, segD);
   float memCore = 1.0 - smoothstep(0.0, 0.003, dC);
   float thick = max(fill, memCore * 0.6);
-  vec3 memCol = mix(oPith.rgb * vec3(0.97, 0.9, 0.72), albedo, (1.0 - thick) * 0.45);
+  vec3 memCol = mix(oPith.rgb * vec3(1.0, 0.95, 0.8), albedo, (1.0 - thick) * 0.35);
   float memK = (1.0 - segFlesh) * mix(memCov * 0.8, 1.0, thick);
   albedo = mix(albedo, memCol, memK);
   rough = mix(rough, mix(0.18, 0.45, thick), memK);
@@ -426,7 +428,7 @@ Surface orangeInterior(SurfaceInput si) {
     if (sd.w <= 0.0) continue;
     vec3 o = p - sd.xyz;
     float t = clamp(o.y / sd.w + 0.5, 0.0, 1.0);
-    vec2 rad = vec2(0.3, 0.21) * sd.w * (sqrt(t) * (1.0 - 0.4 * t * t)) + 0.0002;
+    vec2 rad = vec2(0.32, 0.22) * sd.w * (sqrt(t) * (1.0 - 0.45 * t * t)) + 0.0002;
     vec2 loc = vec2(dot(o, rhoHat), dot(o, ePsi)) / rad;
     float e = length(loc);
     float inSeed = (1.0 - smoothstep(0.9, 1.0, e)) * step(-0.5, o.y / sd.w) * step(o.y / sd.w, 0.5);
@@ -435,6 +437,7 @@ Surface orangeInterior(SurfaceInput si) {
       vec3 sc = mix(kernel, vec3(0.807, 0.716, 0.527), smoothstep(0.6, 0.78, e));
       sc = mix(sc, vec3(0.694, 0.584, 0.392), smoothstep(0.7, 1.0, t) * 0.75);
       sc *= 1.0 - 0.25 * smoothstep(0.85, 0.98, e);
+      sc = mix(sc, oFleshDeep.rgb * 0.5, smoothstep(0.93, 1.0, e) * 0.7);
       albedo = mix(albedo, sc, inSeed);
       rough = mix(rough, 0.25, inSeed);
       clear = mix(clear, 0.7, inSeed);

@@ -69,15 +69,15 @@ export function orangeParams(variety = 'navel', seed = 1) {
     if (i >= seedCount) { seeds.push([0, 0, 0, 0]); continue; }
     const seg = Math.floor(rnd() * n);
     const ang = bounds[seg] + widths[seg] / total * Math.PI * (0.7 + rnd() * 0.6);
-    const rr = core + 0.0035 + rnd() * 0.004;
+    const rr = core + 0.0045 + rnd() * 0.004;
     const y = (rnd() * 2 - 1) * c * 0.35;
-    seeds.push([Math.cos(ang) * rr, y, Math.sin(ang) * rr, 0.0045 + rnd() * 0.0025]);
+    seeds.push([Math.cos(ang) * rr, y, Math.sin(ang) * rr, 0.008 + rnd() * 0.003]);
   }
   return {
     variety, seed, label: v.label,
     a, c, shoulder: v.shoulder * (0.6 + 0.8 * rnd()), stemDip: 0.0012 + rnd() * 0.0009, stemDipWidth: 0.2 + rnd() * 0.06,
     navel: v.navel * (0.7 + 0.6 * rnd()), calyx: 0.0034 + rnd() * 0.0008, lumpFreq: 2.2 + rnd() * 0.8,
-    lumps, lumpPhase, flavedo, pith, core, membrane: 0.00022,
+    lumps, lumpPhase, flavedo, pith, core, membrane: 0.0003,
     segments: n, wave: 0.03 + rnd() * 0.03, vesicleWidth: jitter(v.vesicle[0], 0.1), vesicleLength: jitter(v.vesicle[1], 0.1),
     bounds, seeds, seedCount,
     rind: v.rind, rindStem: v.rindStem, stemMix: v.stemMix, blush: v.blush, flesh: v.flesh, flesh2: v.flesh2, pithColor: v.pithColor,
