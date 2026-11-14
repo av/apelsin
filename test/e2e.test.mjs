@@ -151,7 +151,7 @@ test('the hand tool lifts and tosses a piece', async () => {
   await page.close();
 });
 
-const PRESETS = { whole: 1, halves: 2, wedges: 8, wheels: 5, reference: 2 };
+const PRESETS = { whole: 1, halves: 2, wedges: 8, reference: 2 };
 
 test('every preset performs real cuts and renders an orange composition', async () => {
   const page = await open('seed=21');
@@ -209,6 +209,10 @@ test('the toolbar and keyboard shortcuts drive presets and tools', async () => {
   const page = await open('seed=6');
   await page.click('[data-preset="wedges"]');
   assert.equal((await page.evaluate(() => window.apelsin.info())).pieces, 8);
+  await page.keyboard.press('4');
+  assert.equal((await page.evaluate(() => window.apelsin.info())).preset, 'reference');
+  await page.keyboard.press('5');
+  assert.equal((await page.evaluate(() => window.apelsin.info())).preset, 'reference');
   await page.keyboard.press('1');
   assert.equal((await page.evaluate(() => window.apelsin.info())).pieces, 1);
   await page.keyboard.press('h');
@@ -463,7 +467,7 @@ test('cut pieces settle without sinking into the floor or into each other', asyn
 test('presets are deterministic and stay still for 600 more frames', async () => {
   const pageA = await open('seed=31');
   const pageB = await open('seed=31');
-  for (const name of ['halves', 'wedges', 'wheels', 'reference']) {
+  for (const name of ['halves', 'wedges', 'reference']) {
     const poses = [];
     for (const page of [pageA, pageB]) {
       await page.evaluate((n) => window.apelsin.preset(n), name);
@@ -548,7 +552,7 @@ test('settled pieces touch the floor: no visible gap and no sinking', async () =
     assert.ok(gaps.some((g) => Math.abs(g) < 0.0005), `${label}: something rests on the floor`);
     if (/halves|reference|knife/.test(label)) assert.ok(gaps.every((g) => Math.abs(g) < 0.0005), `${label}: every piece rests on the floor ${gaps}`);
   };
-  for (const name of ['halves', 'wedges', 'wheels', 'reference']) {
+  for (const name of ['halves', 'wedges', 'reference']) {
     await page.evaluate((n) => window.apelsin.preset(n), name);
     await page.evaluate(() => window.apelsin.step(30));
     await check(name);

@@ -46,7 +46,7 @@ export function createUI(app, { test = false } = {}) {
     const k = e.key.toLowerCase();
     const tools = { k: 'knife', h: 'hand' };
     if (tools[k]) { app.setTool(tools[k]); toolHint(tools[k]); }
-    else if (k >= '1' && k <= '5') app.runPreset(PRESET_NAMES[+k - 1]);
+    else if (k >= '1' && k <= String(PRESET_NAMES.length)) app.runPreset(PRESET_NAMES[+k - 1]);
     else if (k === 'n') app.newOrange();
     else if (k === 'r') app.reset();
     else if (k === 'a') toggleSound();

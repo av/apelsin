@@ -1,6 +1,6 @@
 import { quat, v3 } from './math.js';
 
-export const PRESET_NAMES = ['whole', 'halves', 'wedges', 'wheels', 'reference'];
+export const PRESET_NAMES = ['whole', 'halves', 'wedges', 'reference'];
 
 const deg = Math.PI / 180;
 const HALF_TILT = 58 * deg;
@@ -89,34 +89,6 @@ const LAYOUTS = {
     dripFromCaps(app, app.world.pieces, 6);
     for (const p of app.world.pieces) for (const c of p.caps) if (c.area > 1e-3) app.juice.cutBurst(p, c, app.world.params, 0.15);
     frame(app, { pitch: 0.5, distance: 0.44, height: 0.012 });
-  },
-
-  wheels(app) {
-    const o = app.world.originWorld();
-    const c = app.world.params.c;
-    const heights = [-0.4, -0.13, 0.13, 0.4];
-    heights.forEach((h, k) => app.world.cut(v3.add(o, [0, h * c, 0]), [0, 1, 0], null, { impulse: 0, sound: k === 0, juiceAmount: 0 }));
-    const yaw = app.scene.camera.yaw;
-    const { right, toCamera } = cameraFrame(yaw);
-    const pieces = app.world.pieces.slice().sort((a, b) => a.com[1] - b.com[1]);
-    const ends = [pieces[0], pieces[pieces.length - 1]];
-    const wheels = pieces.slice(1, -1);
-    const step = app.world.params.a * 1.7;
-    wheels.forEach((p, i) => {
-      const s = i - (wheels.length - 1) / 2;
-      const rot = quat.mul(quat.axisAngle(right, 0), quat.axisAngle([0, 1, 0], i * 1.3));
-      const at = v3.add(v3.scale(right, s * step), v3.scale(toCamera, 0.006 - Math.abs(s) * 0.014));
-      app.world.place(p, onPlane(app.world, at[0], at[2]), rot, { drop: 0.0008 + i * 0.004 });
-    });
-    ends.forEach((p, i) => {
-      const cap = p.caps[0];
-      const rot = quat.mul(quat.axisAngle([0, 1, 0], i * 2.1), quat.fromTo(cap.normal, [0, i ? -1 : 1, 0]));
-      const at = v3.add(v3.scale(right, (i ? 1 : -1) * step * 0.8), v3.scale(toCamera, -0.088));
-      app.world.place(p, onPlane(app.world, at[0], at[2]), rot, { drop: 0.0008 });
-    });
-    app.settle(4);
-    dripFromCaps(app, wheels, 5);
-    frame(app, { pitch: 0.6, distance: 0.52, height: 0.012, lowPitch: 0.38 });
   },
 
   reference(app) {
