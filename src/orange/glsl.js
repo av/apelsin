@@ -78,12 +78,14 @@ Surface orangeRind(SurfaceInput si) {
   float fw = si.pixel * scale;
   float detail = 1.0 - smoothstep(0.3, 0.85, fw);
   vec3 q = p * scale + oNoise.xyz;
-  Cell c = voronoi3(q, 0.85);
-  float pit = exp(-c.f1 * c.f1 / 0.07);
-  float rim = smoothstep(0.18, 0.32, c.f1) * (1.0 - smoothstep(0.32, 0.5, c.f1));
-  vec3 g = -oGland.y * pit * (2.0 / 0.07) * c.toCenter * 0.075;
-  Cell c2 = voronoi3(q * 0.43 + 7.1, 0.9);
-  g += -c2.toCenter * exp(-c2.f1 * c2.f1 / 0.12) * 0.12;
+  Cell c = voronoiShell(q, Nr, 0.9);
+  float rPit = 0.42 + 0.12 * c.id.z;
+  float x2 = min(c.f1 * c.f1 / (rPit * rPit), 1.0);
+  float pit = (1.0 - x2) * (1.0 - x2);
+  float rim = smoothstep(0.6, 0.9, x2) * (1.0 - smoothstep(1.0, 1.6, c.f1 * c.f1 / (rPit * rPit)));
+  vec3 g = -oGland.y * 0.075 * (4.0 / (rPit * rPit)) * (1.0 - x2) * c.toCenter;
+  Cell c2 = voronoiShell(q * 0.3 + 7.1, Nr, 0.9);
+  g += -c2.toCenter * exp(-c2.f1 * c2.f1 / 0.12) * 0.2;
   g *= detail;
   float m1 = fbm3(p * 70.0 + oNoise.yzx), m2 = fbm3(p * 260.0 + oNoise.zxy);
   vec3 albedo = oRind.rgb * (1.0 + oGland.z * (m1 - 0.5) * 1.6 + 0.08 * (m2 - 0.5));
@@ -92,11 +94,11 @@ Surface orangeRind(SurfaceInput si) {
   float blushMask = smoothstep(0.45, 0.75, fbm3(p * 35.0 + oNoise.xzy + 3.0) + 0.2 * d.x);
   albedo = mix(albedo, oBlush.rgb, blushMask * oBlush.w);
   albedo *= mix(1.0, 0.86, pit * detail);
-  float rough = mix(0.42, 0.3, rim * detail);
+  float rough = mix(0.48, 0.36, rim * detail);
   float scuff = smoothstep(0.62, 0.7, fbm3(p * 420.0 + oNoise.zyx));
   rough = mix(rough, 0.6, scuff * 0.7);
   albedo = mix(albedo, albedo * vec3(1.05, 1.0, 0.9) + 0.02, scuff * 0.4);
-  float clear = mix(0.55, 0.15, scuff);
+  float clear = mix(0.7, 0.2, scuff);
   float rc = (oShape2.z / a) * (0.8 + 0.2 * cos(5.0 * psi));
   float calyx = 1.0 - smoothstep(rc * 0.9, rc * 1.05, th);
   float wrinkle = smoothstep(rc * 0.9, rc * 1.3, th) * (1.0 - smoothstep(rc * 1.6, rc * 3.2, th));
@@ -120,7 +122,7 @@ Surface orangeRind(SurfaceInput si) {
   s.albedo = clamp(albedo, 0.0, 1.0);
   s.roughness = rough;
   s.clearcoat = clear;
-  s.clearcoatRoughness = mix(0.18, 0.3, scuff);
+  s.clearcoatRoughness = mix(0.15, 0.3, scuff);
   s.cavity = mix(1.0, 0.7, pit * detail);
   s.sssProfile = 1.0;
   s.sssWidth = 0.5;
@@ -223,7 +225,7 @@ Surface orangeInterior(SurfaceInput si) {
     }
   }
   vec3 sq = d * (R * oGland.x * 1.6) + oNoise.xyz;
-  Cell gl = voronoi3(sq, 0.9);
+  Cell gl = voronoiShell(sq, d, 0.9);
   float tooth = (1.0 - smoothstep(0.28, 0.42, gl.f1)) * (1.0 - smoothstep(0.6, 1.2, px * oGland.x * 1.6));
   float boundary = tf + tooth * 0.00055 * (0.6 + 0.8 * gl.id.y);
   float pithK = 1.0 - smoothstep(peel - px * 0.6, peel + px * 0.6, depth);

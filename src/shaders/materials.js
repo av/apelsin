@@ -46,14 +46,14 @@ void applyWetness(inout Surface s, SurfaceInput si) {
   float wx = texture(uWetness, uv + vec2(e, 0.0)).r - texture(uWetness, uv - vec2(e, 0.0)).r;
   float wz = texture(uWetness, uv + vec2(0.0, e)).r - texture(uWetness, uv - vec2(0.0, e)).r;
   float tint = clamp(wt.g / max(wt.r, 1e-3), 0.0, 1.0);
-  vec3 juice = vec3(0.93, 0.716, 0.352);
-  float film = smoothstep(0.05, 0.6, wet);
-  float rim = smoothstep(0.02, 0.12, wet) * (1.0 - smoothstep(0.12, 0.4, wet));
-  s.albedo = mix(s.albedo, s.albedo * mix(vec3(0.85), juice, tint), film) * (1.0 - 0.12 * rim * tint);
-  s.roughness = mix(s.roughness, 0.1, film);
-  s.clearcoat = max(s.clearcoat, film * 0.7);
-  s.clearcoatRoughness = mix(s.clearcoatRoughness, 0.07, film);
-  s.N = perturb(s.N, vec3(wx, 0.0, wz) * 0.6, 1.0);
+  vec3 juice = vec3(0.98, 0.82, 0.5);
+  float film = smoothstep(0.05, 0.5, wet);
+  float rim = smoothstep(0.03, 0.1, wet) * (1.0 - smoothstep(0.1, 0.3, wet));
+  s.albedo = mix(s.albedo, s.albedo * mix(vec3(0.9), juice, tint), film) * (1.0 - 0.1 * rim);
+  s.roughness = mix(s.roughness, 0.12, film);
+  s.clearcoat = max(s.clearcoat, film * 0.8);
+  s.clearcoatRoughness = mix(s.clearcoatRoughness, 0.05, film);
+  s.N = perturb(s.N, vec3(wx, 0.0, wz) * 0.25, 1.0);
 }
 `;
 
@@ -73,28 +73,33 @@ const BOARD = `
 Surface materialSurface(SurfaceInput si) {
   vec3 w = si.world;
   Surface s = defaultSurface(normalize(si.normal));
-  float warp = fbm3(vec3(w.x * 4.0, w.y * 40.0, w.z * 40.0)) * 0.012;
-  float rings = fract((w.z + warp + 0.3 * fbm3(w * vec3(1.5, 30.0, 6.0)) * 0.02) * 260.0);
-  float grain = smoothstep(0.0, 0.25, rings) * (1.0 - smoothstep(0.55, 1.0, rings));
-  vec3 light = vec3(0.56, 0.33, 0.16), dark = vec3(0.34, 0.17, 0.07);
-  vec3 col = mix(dark, light, 0.35 + 0.5 * grain);
-  col *= 0.9 + 0.2 * fbm3(w * vec3(8.0, 50.0, 300.0));
-  col *= 0.94 + 0.06 * vnoise(w * vec3(3000.0, 60.0, 400.0));
+  float stripId = floor(w.z / 0.045);
+  vec3 sh = hash33(vec3(stripId, 1.0, 2.0));
+  float n1 = fbm3(vec3(w.x * 4.0 + sh.x * 10.0, w.y * 40.0, w.z * 40.0));
+  float gc = w.z * (60.0 + 80.0 * sh.y) + n1 * (2.0 + 4.0 * sh.z) + sin(w.x * (3.0 + 6.0 * sh.x) + n1 * 5.0) * (0.4 + sh.y) + w.y * 40.0 + sh.x * 7.0;
+  float ring = fract(gc);
+  float late = smoothstep(0.55, 0.85, ring) * (1.0 - smoothstep(0.92, 1.0, ring));
+  vec3 col = mix(vec3(0.5, 0.29, 0.135), vec3(0.3, 0.15, 0.065), late * (0.4 + 0.4 * sh.z));
+  col *= mix(vec3(0.85, 0.82, 0.8), vec3(1.12, 1.05, 0.95), sh.x) * (0.85 + 0.25 * fbm3(w * vec3(3.0, 30.0, 10.0)));
+  col *= 1.0 - 0.35 * (1.0 - smoothstep(0.0, 0.0012, abs(fract(w.z / 0.045) - 0.5) * 0.045 - 0.0215));
+  float pores = vnoise(vec3(w.x * 90.0, w.y * 2500.0, w.z * 2500.0));
+  col *= 0.9 + 0.12 * pores;
   float marks = 0.0;
-  for (int i = 0; i < 6; i++) {
+  for (int i = 0; i < 7; i++) {
     vec3 h = hash33(vec3(float(i), 3.0, 7.0));
-    float ang = (h.x - 0.5) * 1.2;
+    float ang = (h.x - 0.5) * 1.4;
     vec2 dir = vec2(cos(ang), sin(ang));
-    vec2 o = (h.yz - 0.5) * 0.3;
+    vec2 o = (h.yz - 0.5) * vec2(0.3, 0.2);
     float dist = abs(dot(w.xz - o, vec2(-dir.y, dir.x)));
     float along = abs(dot(w.xz - o, dir));
-    marks = max(marks, (1.0 - smoothstep(0.0, 0.00025, dist)) * (1.0 - smoothstep(0.04, 0.09, along)));
+    marks = max(marks, (1.0 - smoothstep(0.0, 0.0002, dist)) * (1.0 - smoothstep(0.03, 0.08, along)) * step(0.5, h.x + 0.3));
   }
-  s.albedo = mix(col, col * 1.25, marks * 0.6);
-  s.roughness = mix(0.55, 0.75, marks) + 0.08 * grain;
+  s.albedo = mix(col, col * 1.3 + 0.02, marks * 0.7);
+  s.roughness = mix(0.5, 0.75, marks) + 0.1 * late;
   s.f0 = vec3(0.035);
-  s.N = perturb(s.N, vec3(0.0, 0.0, (grain - 0.5) * 0.02), 1.0);
-  s.sssProfile = 0.0;
+  s.clearcoat = 0.15;
+  s.clearcoatRoughness = 0.35;
+  s.N = perturb(s.N, vec3(0.0, 0.0, (late - 0.5) * 0.03 + (pores - 0.5) * 0.02), 1.0);
   applyWetness(s, si);
   return s;
 }
@@ -121,15 +126,12 @@ const SLATE = `
 Surface materialSurface(SurfaceInput si) {
   vec3 w = si.world;
   Surface s = defaultSurface(normalize(si.normal));
-  float layers = fbm3(vec3(w.x * 20.0, w.y * 400.0, w.z * 60.0));
-  float fine = vnoise(w * 1500.0);
-  vec3 col = vec3(0.045, 0.048, 0.052) * (0.75 + 0.5 * layers) * (0.9 + 0.2 * fine);
-  s.albedo = col;
-  s.roughness = 0.5 + 0.2 * layers;
+  float layers = fbm3(vec3(w.x * 14.0, w.y * 300.0, w.z * 40.0));
+  float fine = vnoise(w * 1800.0);
+  s.albedo = vec3(0.03, 0.032, 0.035) * (0.85 + 0.3 * layers) * (0.92 + 0.16 * fine);
+  s.roughness = 0.6 + 0.12 * layers;
   s.f0 = vec3(0.04);
-  float chip = smoothstep(0.6, 0.75, fbm3(w * 60.0));
-  s.N = perturb(s.N, vec3(fine - 0.5, 0.0, layers - 0.5) * 0.08, 1.0);
-  s.roughness = mix(s.roughness, 0.8, chip * 0.5);
+  s.N = perturb(s.N, vec3(fine - 0.5, 0.0, layers - 0.5) * 0.05, 1.0);
   applyWetness(s, si);
   return s;
 }

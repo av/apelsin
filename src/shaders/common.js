@@ -58,6 +58,23 @@ Cell voronoi3(vec3 p, float jitter) {
   c.f1 = sqrt(c.f1); c.f2 = sqrt(c.f2);
   return c;
 }
+Cell voronoiShell(vec3 p, vec3 n, float jitter) {
+  vec3 i = floor(p), f = fract(p);
+  Cell c; c.f1 = 9.0; c.f2 = 9.0; c.toCenter = vec3(0); c.id = vec3(0);
+  for (int z = -1; z <= 1; z++) for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
+    vec3 g = vec3(x, y, z);
+    vec3 h = hash33(i + g);
+    vec3 r = g + 0.5 + (h - 0.5) * jitter - f;
+    float radial = dot(r, n);
+    if (abs(radial) > 0.5) continue;
+    r -= n * radial;
+    float d = dot(r, r);
+    if (d < c.f1) { c.f2 = c.f1; c.f1 = d; c.toCenter = r; c.id = h; }
+    else if (d < c.f2) c.f2 = d;
+  }
+  c.f1 = sqrt(c.f1); c.f2 = sqrt(c.f2);
+  return c;
+}
 float ign(vec2 p) { return fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.00583715)))); }
 `;
 

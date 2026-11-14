@@ -64,10 +64,9 @@ in float vAmount;
 out vec4 outColor;
 void main() {
   float r = length(vLocal);
-  float wobble = 0.08 * sin(atan(vLocal.y, vLocal.x) * 5.0 + vAmount * 40.0);
-  float edge = 1.0 - smoothstep(0.8 + wobble, 1.0 + wobble, r);
-  float rim = 1.0 + 0.6 * smoothstep(0.5, 0.95, r) * edge;
-  float w = edge * rim * vAmount;
+  float wobble = 0.12 * (vnoise(vec3(vLocal * 2.5, vAmount * 97.0)) - 0.5);
+  float edge = 1.0 - smoothstep(0.75 + wobble, 0.95 + wobble, r);
+  float w = edge * vAmount * (0.6 + 0.4 * (1.0 - r * r));
   outColor = vec4(w, w * 0.85, 0.0, 1.0);
 }`;
 
