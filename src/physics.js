@@ -8,6 +8,8 @@ const REST_SPEED = 0.006;
 const REST_SPIN = 0.12;
 const REST_TIME = 0.3;
 const MIN_BALL = 0.0018;
+const MIN_FLOOR_BALL = 0.0007;
+const SAG = 0.0002;
 const GROUP_STATIC = 0x0001, GROUP_BALL = 0x0002, GROUP_TOUCH = 0x0004;
 const groups = (member, filter) => (member << 16) | filter;
 
@@ -49,31 +51,46 @@ export function contactBalls(piece) {
     }
     return false;
   };
-  const candidates = Math.min(tris, 3200);
-  const stride = tris / candidates;
-  for (let k = 0; k < candidates && balls.length < 360; k++) {
-    const t = ((Math.floor(k * stride) * 7919) % tris) * 3 * S;
-    const c = [0, 1, 2].map((j) => (data[t + j] + data[t + S + j] + data[t + 2 * S + j]) / 3);
-    const n = v3.norm([0, 1, 2].map((j) => data[t + 3 + j] + data[t + S + 3 + j] + data[t + 2 * S + 3 + j]));
+  const cand = [];
+  const step = Math.max(1, Math.round(tris / 9000));
+  const capList = piece.caps.map((cp) => [cp.normal[0], cp.normal[1], cp.normal[2], cp.d]);
+  for (let k = 0; k < tris; k += step) {
+    const t = k * 3 * S;
+    const cx = (data[t] + data[t + S] + data[t + 2 * S]) / 3, cy = (data[t + 1] + data[t + S + 1] + data[t + 2 * S + 1]) / 3, cz = (data[t + 2] + data[t + S + 2] + data[t + 2 * S + 2]) / 3;
+    let nx = data[t + 3] + data[t + S + 3] + data[t + 2 * S + 3], ny = data[t + 4] + data[t + S + 4] + data[t + 2 * S + 4], nz = data[t + 5] + data[t + S + 5] + data[t + 2 * S + 5];
+    const nl = Math.hypot(nx, ny, nz) || 1;
+    const ux = -nx / nl, uy = -ny / nl, uz = -nz / nl;
     const flat = data[t + 6] > 0.5;
-    const inward = v3.scale(n, -1);
-    const thick = exitDistance(piece, c, inward, rmax);
+    const bb = cx * ux + cy * uy + cz * uz, cc = cx * cx + cy * cy + cz * cz - rmax * rmax;
+    let thick = -bb + Math.sqrt(Math.max(0, bb * bb - cc));
+    for (const [px, py, pz, pd] of capList) {
+      const den = px * ux + py * uy + pz * uz;
+      if (den > 1e-6) thick = Math.min(thick, (pd - (px * cx + py * cy + pz * cz)) / den);
+    }
+    const R = Math.sqrt(cx * cx + cy * cy + cz * cz);
     let r;
     if (flat) {
-      const planar = v3.sub(c, v3.scale(n, v3.dot(c, n)));
-      const room = Math.sqrt(Math.max(0, rmax * rmax - v3.dot(c, n) ** 2)) - v3.len(planar);
+      const dn = -(cx * ux + cy * uy + cz * uz);
+      const planar = Math.sqrt(Math.max(0, R * R - dn * dn));
+      const room = Math.sqrt(Math.max(0, rmax * rmax - dn * dn)) - planar;
       r = Math.min(flatMax, thick * 0.45, Math.max(0.0012, room));
-    } else r = Math.min(v3.len(c) * 0.35, thick * 0.47, 0.012);
-    for (const cap of piece.caps) {
-      const k = 1 + v3.dot(inward, cap.normal);
-      if (k > 1e-3) r = Math.min(r, (cap.d - v3.dot(c, cap.normal)) / k);
+    } else r = Math.min(R * 0.5, thick * 0.47, 0.016);
+    for (const [px, py, pz, pd] of capList) {
+      const kk = 1 + px * ux + py * uy + pz * uz;
+      if (kk > 1e-3) r = Math.min(r, (pd - (px * cx + py * cy + pz * cz)) / kk);
     }
-    if (r < MIN_BALL) continue;
+    if (r < MIN_FLOOR_BALL) continue;
+    const gap = flat ? r * 0.9 : Math.max(0.0006, Math.sqrt(8 * SAG / Math.max(1e-3, 1 / r - 1 / R)) * Math.max(0.2, (R - r) / R));
+    cand.push([[cx, cy, cz], [ux, uy, uz], r, flat, gap, (k * 2654435761) % 1000]);
+  }
+  cand.sort((a, b) => b[2] - a[2] || a[5] - b[5]);
+  for (const [c, inward, r, flat, gap] of cand) {
+    if (balls.length >= 560) break;
     const centre = v3.add(c, v3.scale(inward, r));
-    if (near(centre, r * (flat ? 0.8 : 0.4))) continue;
+    if (near(centre, gap)) continue;
     const key = cellKey(...centre);
     if (!grid.has(key)) grid.set(key, []);
-    grid.get(key).push([...centre, r * 0.4]);
+    grid.get(key).push([...centre, gap]);
     balls.push([centre[0] - piece.com[0], centre[1] - piece.com[1], centre[2] - piece.com[2], r, flat]);
   }
   return balls;
@@ -121,7 +138,7 @@ export async function createPhysics(rapierUrl = '../vendor/rapier/rapier.mjs') {
     const friction = whole ? 0.75 : 0.9, restitution = whole ? 0.22 : 0.08;
     const balls = contactBalls(piece);
     const touching = new Set();
-    for (const b of balls.slice().sort((a, c) => c[3] - a[3])) {
+    for (const b of balls.filter((x) => x[3] >= MIN_BALL).sort((a, c) => c[3] - a[3])) {
       let free = true;
       for (const t of touching) if (Math.hypot(t[0] - b[0], t[1] - b[1], t[2] - b[2]) < 0.5 * (t[3] + b[3])) { free = false; break; }
       if (free) touching.add(b);

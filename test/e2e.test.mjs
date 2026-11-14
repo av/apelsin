@@ -524,7 +524,8 @@ test('squeezing a cut face squashes the piece, jets juice and wets the floor', a
   const page = await open('seed=9&preset=halves');
   await page.evaluate(() => window.apelsin.setTool('squeeze'));
   const pieces = await page.evaluate(() => window.apelsin.poses());
-  const [x, y] = await project(page, pieces[0].position);
+  const up = pieces.reduce((a, b) => (b.faceUp > a.faceUp ? b : a));
+  const [x, y] = await project(page, up.position);
   const before = await page.evaluate(() => window.apelsin.info());
   await page.mouse.move(x, y - 8);
   await page.mouse.down();
@@ -637,5 +638,34 @@ test('the page has a title, description, social tags and an orange favicon; the 
   assert.equal(await page.evaluate(() => document.getElementById('hint').classList.contains('gone')), true);
   await page.keyboard.press('t');
   assert.equal((await page.evaluate(() => window.apelsin.info())).slowmo, true);
+  await page.close();
+});
+
+test('settled pieces touch the floor: no visible gap and no sinking', async () => {
+  const page = await open('seed=21');
+  const check = async (label) => {
+    const { gaps } = await page.evaluate(() => window.apelsin.contacts());
+    for (const g of gaps) {
+      assert.ok(g > -0.0005, `${label}: a piece sinks ${(g * 1000).toFixed(2)} mm into the floor`);
+      assert.ok(g < 0.0005 || g > 0.003, `${label}: a piece hovers ${(g * 1000).toFixed(2)} mm above the floor`);
+    }
+    assert.ok(gaps.some((g) => Math.abs(g) < 0.0005), `${label}: something rests on the floor`);
+  };
+  for (const name of ['halves', 'wedges', 'wheels', 'reference']) {
+    await page.evaluate((n) => window.apelsin.preset(n), name);
+    await page.evaluate(() => window.apelsin.step(30));
+    await check(name);
+  }
+  for (const scene of ['kitchen', 'dark']) {
+    await page.evaluate((s) => window.apelsin.setScene(s), scene);
+    await page.evaluate(() => window.apelsin.preset('halves'));
+    await page.evaluate(() => window.apelsin.step(30));
+    await check(`${scene} halves`);
+  }
+  await page.evaluate(() => window.apelsin.setScene('studio'));
+  await page.evaluate(() => window.apelsin.newOrange(21));
+  await page.evaluate(() => window.apelsin.cut([0.01, 0.04, 0], [1, 0.15, 0.3]));
+  await page.evaluate(() => window.apelsin.step(600));
+  await check('knife cut');
   await page.close();
 });

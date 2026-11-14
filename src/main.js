@@ -10,6 +10,7 @@ import { createTools, TOOL_NAMES } from './tools.js';
 import { createUI } from './ui.js';
 import { runPreset, PRESET_NAMES } from './presets.js';
 import { mulberry32, v3 } from './math.js';
+import { restDirToWorld } from './orange/piece.js';
 
 const params = new URLSearchParams(location.search);
 const pick = (key, list, fallback) => (list.includes(params.get(key)) ? params.get(key) : fallback);
@@ -227,7 +228,7 @@ function boot() {
       knife: tools.knifeVisible, splats: juice.stats.splats, drips: juice.stats.drips, slowmo: state.slowmo, macro: state.macro,
       squash: world.pieces.reduce((m, p) => Math.max(m, p.squash), 0), muted: audio.muted,
     }),
-    poses: () => world.pieces.map((p) => ({ id: p.id, position: p.position.slice(), rotation: p.rotation.slice(), sleeping: p.body ? p.body.isSleeping() : null, caps: p.caps.length })),
+    poses: () => world.pieces.map((p) => ({ id: p.id, position: p.position.slice(), rotation: p.rotation.slice(), sleeping: p.body ? p.body.isSleeping() : null, caps: p.caps.length, faceUp: p.caps.length ? Math.max(...p.caps.map((c) => restDirToWorld(p, c.normal)[1])) : -1 })),
     project: (p) => camera.project(p, canvas.clientWidth, canvas.clientHeight),
     contacts: () => world.contacts(),
     wetness: () => juice.stats.area,

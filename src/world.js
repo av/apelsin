@@ -128,7 +128,15 @@ export function createWorld(gl, { juice, audio }) {
     return depth;
   }
 
+  function lowestVertex(piece) {
+    const d = piece.geometry.data, m = piece.model;
+    let lo = Infinity;
+    for (let i = 0; i < piece.geometry.count; i++) lo = Math.min(lo, m[1] * d[i * 7] + m[5] * d[i * 7 + 1] + m[9] * d[i * 7 + 2] + m[13]);
+    return lo;
+  }
+
   function contacts() {
+    const gaps = w.pieces.map((p) => lowestVertex(p) - w.floorAt(p.position[0], p.position[2]));
     let floor = Infinity, overlap = 0;
     for (const p of w.pieces) {
       floor = Math.min(floor, p.position[1] + lowestY(p) - w.floorAt(p.position[0], p.position[2]));
@@ -141,7 +149,7 @@ export function createWorld(gl, { juice, audio }) {
         }
       }
     }
-    return { floor: Number.isFinite(floor) ? floor : 0, overlap };
+    return { floor: Number.isFinite(floor) ? floor : 0, overlap, gaps };
   }
 
   function cutFaces() { return w.pieces.reduce((s, p) => s + p.caps.length, 0); }
