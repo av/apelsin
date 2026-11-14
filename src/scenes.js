@@ -39,7 +39,7 @@ function wallMesh(z, x0, x1, y0, y1) {
   ]);
 }
 
-function roundedBoardMesh([sx, sy, sz], top, corner = 0.014, bevel = 0.004, segments = 6) {
+function roundedBoardMesh([sx, sy, sz], top, corner = 0.016, bevel = 0.0065, segments = 9) {
   const data = [];
   const push = (p, n) => data.push(p[0], p[1], p[2], n[0], n[1], n[2], 0);
   const hx = sx / 2 - corner, hz = sz / 2 - corner;
@@ -50,7 +50,8 @@ function roundedBoardMesh([sx, sy, sz], top, corner = 0.014, bevel = 0.004, segm
       ring.push([cx + Math.cos(a) * corner, cz + Math.sin(a) * corner, Math.cos(a), Math.sin(a)]);
     }
   });
-  const profile = [[0, top - sy, 1, 0], [0, top - bevel, 1, 0]];
+  const foot = 0.002;
+  const profile = [[foot, top - sy, 0, -1], [foot * (1 - Math.cos(Math.PI / 4)), top - sy + foot * (1 - Math.sin(Math.PI / 4)), 0.7071, -0.7071], [0, top - sy + foot, 1, 0], [0, top - bevel, 1, 0]];
   for (let i = 1; i <= segments; i++) {
     const a = (i / segments) * Math.PI / 2;
     profile.push([bevel * (1 - Math.cos(a)), top - bevel + Math.sin(a) * bevel, Math.cos(a), Math.sin(a)]);
@@ -72,7 +73,7 @@ function roundedBoardMesh([sx, sy, sz], top, corner = 0.014, bevel = 0.004, segm
 
 const light = (dir, up, size, color, intensity, soft = 0.12, shape = {}) => ({ dir: v3.norm(dir), up, size, color, intensity, soft, ...shape });
 
-export const WINDOW = { centre: [-0.16, 0.25, -0.36], half: [0.34, 0.24] };
+export const WINDOW = { centre: [-0.34, 0.26, -0.36], half: [0.34, 0.24] };
 const windowDir = v3.norm(WINDOW.centre);
 const windowSize = [Math.atan(WINDOW.half[0] / v3.len(WINDOW.centre)), Math.atan(WINDOW.half[1] / v3.len(WINDOW.centre))];
 
@@ -101,11 +102,11 @@ export const SCENES = {
       lights: [
         light(windowDir, [0, 1, 0], windowSize, [1, 0.9, 0.76], 5.0, 0.06),
         light([0.55, 0.75, 0.45], [0, 1, 0], [0.9, 0.7], [0.9, 0.93, 1], 0.5, 0.6),
-        light([0.35, 0.3, 1], [0, 1, 0], [0.9, 0.55], [1, 0.92, 0.82], 0.5, 0.6),
+        light([0.35, 0.3, 1], [0, 1, 0], [0.9, 0.55], [1, 0.95, 0.88], 1.0, 0.6),
         light([-0.9, 0.4, 0.3], [0, 1, 0], [0.5, 0.4], [0.9, 0.85, 0.8], 0.12, 0.5),
       ],
     },
-    envIntensity: 1, keyIntensity: 1, exposure: 1.0, background: [3, 1, 1, 0], groundReach: 0.07,
+    envIntensity: 1, keyIntensity: 1, exposure: 1.1, background: [3, 1, 1, 0], groundReach: 0.07,
     pool: [0.5, 0.45],
     occluder: { bounce: 0.35, leak: 0.9, mfp: [0.009, 0.0032, 0.0012], bounceWhite: 0.15 },
     grade: { white: 1.7, contrast: 1.18, saturation: 1.08, balance: [1.0, 0.98, 0.95], vignette: 0.25, grain: 0.007, bloom: 0.06, bloomThreshold: 1.6, toe: 0.003 },

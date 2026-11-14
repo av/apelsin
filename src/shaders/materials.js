@@ -72,71 +72,99 @@ Surface materialSurface(SurfaceInput si) {
 `;
 
 const BOARD = `
-float knifeScores(vec2 p, float px) {
-  float cell = 0.018;
+float knifeScores(vec2 p, float px, out vec2 groove) {
+  float cell = 0.012;
   vec2 c = floor(p / cell);
   float m = 0.0;
+  groove = vec2(0.0);
   for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
     vec2 id = c + vec2(i, j);
-    for (int k = 0; k < 2; k++) {
+    for (int k = 0; k < 3; k++) {
       vec3 h = hash33(vec3(id, float(k) + 5.0));
-      if (h.z < 0.2) continue;
+      if (h.z < 0.5) continue;
       vec2 o = (id + h.xy) * cell;
-      float family = step(0.75, fract(h.z * 3.7));
-      float ang = (h.x - 0.5) * 0.9 + family * 1.5708 + 0.35;
+      float ang = 1.5708 + (h.x - 0.5) * 2.0 + step(0.8, fract(h.y * 7.3)) * 0.9;
       vec2 d = vec2(cos(ang), sin(ang));
-      float len = cell * (0.5 + 2.0 * fract(h.z * 7.13));
+      float len = cell * (0.3 + 1.2 * fract(h.z * 7.13));
       vec2 q = p - o;
       float along = dot(q, d);
-      float dist = length(q - d * clamp(along, -len * 0.5, len * 0.5));
-      float taper = 1.0 - smoothstep(len * 0.25, len * 0.5, abs(along));
-      float wdt = 0.00005 + 0.0001 * fract(h.y * 13.1);
-      float line = (1.0 - smoothstep(wdt, wdt + px * 1.5, dist)) * taper * min(1.0, wdt / max(px * 0.7, 1e-6) + 0.25);
-      m = max(m, line * (0.35 + 0.65 * fract(h.x * 31.7)));
+      vec2 nrm = vec2(-d.y, d.x);
+      float across = dot(q, nrm);
+      float taper = 1.0 - smoothstep(len * 0.2, len * 0.5, abs(along));
+      float wdt = 0.00003 + 0.00008 * fract(h.y * 13.1);
+      float line = (1.0 - smoothstep(wdt, wdt + px * 1.2, abs(across))) * taper * min(1.0, wdt / max(px * 0.6, 1e-6) + 0.2);
+      float k2 = line * (0.2 + 0.5 * fract(h.x * 31.7));
+      if (k2 > m) { m = k2; groove = nrm * sign(across) * taper; }
     }
   }
   return m;
 }
+float woodRing(vec3 w, vec3 sh, float lz, out float r, out vec2 gradYZ) {
+  vec2 axis = vec2(-0.03 - 0.09 * sh.x + w.x * (sh.z - 0.5) * 0.035, (sh.y - 0.5) * 0.06 + w.x * (sh.x - 0.5) * 0.02);
+  vec2 d = vec2(w.y, lz) - axis;
+  float warp = vnoise(vec3(w.x * 4.0, w.y * 30.0, lz * 30.0) + sh * 10.0) - 0.5;
+  r = length(d) + 0.0012 * warp;
+  gradYZ = d / max(length(d), 1e-5);
+  return r;
+}
 Surface materialSurface(SurfaceInput si) {
   vec3 w = si.world;
   float px = si.pixel;
-  Surface s = defaultSurface(normalize(si.normal));
-  float stripW = 0.04;
+  vec3 Ng = normalize(si.normal);
+  Surface s = defaultSurface(Ng);
+  float stripW = 0.046;
   float strip = floor((w.z + 0.16) / stripW);
   vec3 sh = hash33(vec3(strip, 4.0, 9.0));
   float lz = w.z + 0.16 - (strip + 0.5) * stripW;
-  vec2 axis = vec2(-0.03 - 0.08 * sh.x, (sh.y - 0.5) * 0.08);
-  float warp = fbm3(vec3(w.x * 3.0, w.y * 30.0, lz * 30.0) + sh * 10.0);
-  float r = length(vec2(w.y, lz) - axis) + 0.0018 * warp + 0.0006 * sin(w.x * (5.0 + 5.0 * sh.z) + sh.z * 6.0);
-  float ringW = 0.0016 + 0.0016 * sh.z;
-  float ring = fract(r / ringW);
-  float late = smoothstep(0.45, 0.8, ring) * (1.0 - smoothstep(0.86, 1.0, ring));
-  late = mix(late, 0.3, smoothstep(0.25, 0.8, px / ringW));
-  vec3 early = mix(vec3(0.24, 0.1, 0.035), vec3(0.36, 0.16, 0.06), sh.x);
-  vec3 col = mix(early, early * vec3(0.45, 0.36, 0.3), late * 0.85);
-  float fibreK = 1.0 - smoothstep(0.0001, 0.0005, px);
-  float fibre = vnoise(vec3(w.x * 40.0, w.y * 1800.0, lz * 1800.0) + sh * 30.0);
-  col *= mix(1.0, 0.85 + 0.3 * fibre, fibreK);
-  col *= 0.85 + 0.3 * fbm3(vec3(w.x * 2.0, w.y * 50.0, lz * 50.0) + sh * 3.0);
-  float poreDetail = 1.0 - smoothstep(0.00008, 0.0003, px);
-  float pores = smoothstep(0.7, 0.86, vnoise(vec3(w.x * 260.0, w.y * 3500.0, lz * 3500.0) + sh * 50.0)) * poreDetail;
-  col *= 1.0 - 0.3 * pores - 0.06 * (1.0 - poreDetail);
-  float edge = stripW * 0.5 - abs(lz);
-  col *= 1.0 - 0.2 * (1.0 - smoothstep(0.0, 0.0003 + px, edge));
-  float top = step(0.5, s.N.y);
-  float scores = top > 0.5 && px < 0.0015 ? knifeScores(w.xz, px) * (1.0 - smoothstep(0.0006, 0.0015, px)) : 0.0;
-  float wear = (1.0 - smoothstep(0.02, 0.2, length(w.xz * vec2(0.9, 1.3)))) * (0.5 + 0.5 * fbm3(w * 45.0)) * top;
-  col = mix(col, col * vec3(1.1, 1.08, 1.05) + 0.008, wear * 0.3);
-  col = mix(col, col * vec3(1.25, 1.2, 1.12) + 0.03, scores * 0.6);
+  float r;
+  vec2 gYZ;
+  woodRing(w, sh, lz, r, gYZ);
+  float period = 0.0018 + 0.0014 * sh.z + 0.0004 * (vnoise(vec3(r * 300.0, sh.xy * 9.0)) - 0.5);
+  float ringId = floor(r / period);
+  float t = fract(r / period);
+  float ringFilter = smoothstep(0.2, 0.7, px / period);
+  float late = smoothstep(0.5, 0.68, t) * (1.0 - smoothstep(0.86, 0.97, t));
+  float early = 1.0 - smoothstep(0.08, 0.35, t);
+  late = mix(late, 0.38, ringFilter);
+  early = mix(early, 0.25, ringFilter);
+  float ringTone = hash12(vec2(ringId, strip)) - 0.5;
+  vec3 base = mix(vec3(0.32, 0.15, 0.055), vec3(0.42, 0.21, 0.085), sh.x) * (1.0 + 0.15 * (sh.y - 0.5));
+  vec3 lateCol = base * vec3(0.5, 0.38, 0.3);
+  vec3 col = mix(base * (1.0 + 0.08 * ringTone), lateCol, late * (0.8 + 0.2 * sh.z));
+  float streak = vnoise(vec3(w.x * 6.0, w.y * 160.0, lz * 160.0) + sh * 20.0);
+  col *= 0.86 + 0.28 * streak;
+  col *= 1.0 + 0.1 * (fbm3(vec3(w.x * 1.5, w.y * 12.0, lz * 12.0) + sh * 5.0) - 0.5);
+  float poreK = 1.0 - smoothstep(0.00012, 0.0004, px);
+  vec2 pc = vec2(w.x / 0.0022, r / 0.0002);
+  vec2 pcell = floor(pc);
+  vec3 ph = hash33(vec3(pcell, ringId + strip * 31.0));
+  vec2 pq = (fract(pc) - 0.5 - (ph.xy - 0.5) * 0.5) * vec2(1.0, 1.0);
+  float pore = (1.0 - smoothstep(0.3, 0.45, length(pq * vec2(1.1 + ph.z, 2.2)))) * step(0.5, ph.z) * early;
+  float poreAvg = early * 0.12;
+  pore = mix(poreAvg, pore, poreK);
+  col *= 1.0 - 0.4 * pore;
+  float endGrain = smoothstep(0.6, 0.9, abs(Ng.x));
+  col = mix(col, col * vec3(0.72, 0.66, 0.6), endGrain);
+  float seam = 1.0 - smoothstep(0.0, 0.00025 + px, stripW * 0.5 - abs(lz));
+  col *= 1.0 - 0.18 * seam;
+  float top = step(0.5, Ng.y);
+  vec2 groove;
+  float scores = top > 0.5 && px < 0.0012 ? knifeScores(w.xz, px, groove) * (1.0 - smoothstep(0.0005, 0.0012, px)) : 0.0;
+  float use = (1.0 - smoothstep(0.03, 0.17, length(w.xz * vec2(0.85, 1.25)))) * (0.6 + 0.4 * fbm3(w * 35.0)) * top;
+  col = mix(col, col * vec3(1.22, 1.18, 1.1) + 0.012, scores * 0.6);
+  col = mix(col, col * 1.06, use * 0.4);
   s.albedo = col;
-  s.roughness = mix(0.6, 0.72, wear) + 0.06 * late;
-  s.roughness = mix(s.roughness, 0.75, scores);
-  s.f0 = vec3(0.028);
-  s.clearcoat = mix(0.1, 0.03, max(wear, scores));
-  s.clearcoatRoughness = 0.3;
-  float fine = vnoise(vec3(w.x * 150.0, w.y * 1500.0, lz * 1500.0) + sh * 20.0) - 0.5;
-  s.N = perturb(s.N, vec3(0.0, 0.0, fine * 0.04 * poreDetail + (late - 0.5) * 0.012), 1.0);
-  s.cavity = 1.0 - 0.25 * pores;
+  float oil = fbm3(vec3(w.x * 8.0, 0.0, w.z * 8.0) + sh * 3.0);
+  s.roughness = clamp(mix(0.4, 0.58, oil) + 0.1 * early - 0.06 * late + 0.18 * use + 0.25 * scores + 0.15 * endGrain, 0.25, 0.85);
+  s.f0 = vec3(0.032);
+  s.clearcoat = clamp(0.22 * (1.0 - use * 0.7) * smoothstep(0.3, 0.7, oil + 0.2) * (1.0 - scores) * (1.0 - endGrain * 0.6), 0.0, 1.0);
+  s.clearcoatRoughness = 0.18 + 0.12 * oil;
+  float reliefK = 1.0 - smoothstep(0.0002, 0.001, px);
+  float dLate = (smoothstep(0.42, 0.72, t + 0.04) - smoothstep(0.42, 0.72, t - 0.04)) / (0.08 * period);
+  vec3 gRing = vec3(0.0, gYZ.x, gYZ.y) * dLate * 0.000008 * (1.0 - ringFilter);
+  vec3 gGroove = vec3(groove.x, 0.0, groove.y) * scores * 0.12;
+  s.N = perturb(Ng, (gRing + gGroove) * reliefK + vec3(0.0, 0.0, (streak - 0.5) * 0.02), 1.0);
+  s.cavity = 1.0 - 0.35 * pore - 0.2 * scores;
   applyWetness(s, si);
   return s;
 }
