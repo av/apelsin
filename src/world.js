@@ -6,7 +6,7 @@ import { quat, v3, mulberry32 } from './math.js';
 const MIN_VOLUME = 3e-8;
 
 export function createWorld(gl, { juice, audio }) {
-  const w = { pieces: [], params: null, physics: null, floorAt: () => 0, baseMesh: null, cuts: 0 };
+  const w = { pieces: [], params: null, physics: null, floorAt: () => 0, baseMesh: null, cuts: 0, time: 0 };
 
   function hull(piece) { return piece.hull || (piece.hull = hullPoints(piece.geometry, piece.com)); }
 
@@ -68,9 +68,9 @@ export function createWorld(gl, { juice, audio }) {
     return p ? restToWorld(p, [0, 0, 0]) : [0, 0.04, 0];
   }
 
-  function cut(point, normal, only = null, { impulse = 0.05, sound = true, juiceAmount = 1 } = {}) {
+  function cut(point, normal, only = null, { impulse = 0.04, sound = true, juiceAmount = 1 } = {}) {
     const n = v3.norm(normal);
-    let count = 0;
+    let count = 0, area = 0;
     for (const piece of (only || w.pieces).slice()) {
       if (!w.pieces.includes(piece)) continue;
       const rp = worldToRest(piece, point), rn = worldDirToRest(piece, n);
@@ -84,18 +84,27 @@ export function createWorld(gl, { juice, audio }) {
       const prev = piece.prevModel.slice();
       remove(piece);
       kids.forEach((k, i) => {
+        const side = i === 0 ? 1 : -1;
         k.rotation = piece.rotation.slice();
-        k.position = restToWorld(piece, k.com);
+        k.position = v3.add(restToWorld(piece, k.com), v3.scale(n, side * 0.00015));
         k.hasPrev = false;
         updateModel(k);
         k.prevModel.set(prev);
-        add(k, { linvel: v3.add(vels[i], v3.scale(n, (i === 0 ? 1 : -1) * impulse)), angvel: [av.x, av.y, av.z] });
-        for (const c of k.caps) if (Math.abs(Math.abs(v3.dot(c.normal, rn)) - 1) < 1e-4) juice.emitFromCap(k, c, w.params, Math.round(26 * juiceAmount), 0.22);
+        k.bornAt = w.time;
+        const out = v3.scale(n, side);
+        const tip = v3.scale(v3.cross([0, 1, 0], out), impulse * 20 * Math.sqrt(Math.max(0, 1 - n[1] * n[1])));
+        add(k, { linvel: v3.add(vels[i], v3.add(v3.scale(out, impulse), [0, impulse * 0.3, 0])), angvel: v3.add([av.x, av.y, av.z], tip) });
+        for (const c of k.caps) {
+          if (Math.abs(Math.abs(v3.dot(c.normal, rn)) - 1) > 1e-4 || Math.abs(v3.dot(c.normal, rp) - c.d) > 2e-4) continue;
+          if (i === 0) area += c.area;
+          if (juiceAmount > 0) juice.cutBurst(k, c, w.params, juiceAmount);
+          juice.fresh(k, c, juiceAmount > 0 ? 4 + 3 * juiceAmount : 2);
+        }
       });
       count++;
       w.cuts++;
     }
-    if (count && sound) audio.slice(Math.min(1.4, 0.7 + count * 0.15));
+    if (count && sound) audio.slice({ area, pieces: count, surface: w.surfaceAt ? w.surfaceAt() : 'paper' });
     return count;
   }
 
@@ -106,6 +115,7 @@ export function createWorld(gl, { juice, audio }) {
   }
 
   function update(dt) {
+    w.time += dt;
     if (w.physics) w.physics.step(dt, w.pieces);
     for (const p of w.pieces) updateModel(p);
   }
