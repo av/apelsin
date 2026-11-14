@@ -71,9 +71,13 @@ Anat anatomy(vec3 p) {
   A.u = clamp((a - left) / A.segW * 2.0 - 1.0, -1.0, 1.0);
   A.dS = max(min(a - left, right - a), 0.0) * A.rho;
   float yN = p.y / oShape.y;
-  vec2 cs = vec2(cos(A.psi), sin(A.psi));
-  float torn = vnoise(vec3(cs * 2.3, p.y * 140.0) + oNoise.xyz) * 0.6 + vnoise(vec3(cs * 7.0, p.y * 520.0) + oNoise.zxy) * 0.4;
-  A.coreR = oLayers.z * (0.5 + 0.55 * yN * yN) * (0.72 + 0.6 * torn);
+  float coreBase = oLayers.z * (0.5 + 0.55 * yN * yN);
+  float torn = 0.5;
+  if (A.rho < coreBase * 2.0) {
+    vec2 cs = vec2(cos(A.psi), sin(A.psi));
+    torn = vnoise(vec3(cs * 2.3, p.y * 140.0) + oNoise.xyz) * 0.6 + vnoise(vec3(cs * 7.0, p.y * 520.0) + oNoise.zxy) * 0.4;
+  }
+  A.coreR = coreBase * (0.72 + 0.6 * torn);
   A.dC = A.rho - A.coreR;
   A.memHalf = 0.00007 + 0.00026 * exp(-max(A.dC, 0.0) / 0.0025);
   vec3 hs = hash33(vec3(A.fseg + 0.5, 3.5, oRind.w * 31.0));
@@ -103,8 +107,9 @@ Sac sacsAt(Anat A) {
   Sac best;
   best.sdf = 1.0; best.second = 1.0; best.e = 9.0; best.id = vec3(0.5); best.t = 0.5; best.g = vec2(0.0); best.wx = 1e-4; best.wz = 1e-4;
   float segKey = A.fseg * 17.0 + oRind.w * 53.0;
-  for (int a = 0; a < 3; a++) {
-    float ci = i0 + float(a - 1);
+  float di = fract(xl) < 0.5 ? -1.0 : 1.0;
+  for (int a = 0; a < 2; a++) {
+    float ci = i0 + (a == 0 ? 0.0 : di);
     vec3 hc = hash33(vec3(ci + 0.5, segKey + 0.5, 11.5));
     float zz = zq + hc.x;
     float j0 = floor(zz);

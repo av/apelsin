@@ -71,6 +71,10 @@ float tExit(vec3 ro, vec3 rd) {
   float h = b * b - c;
   return h < 0.0 ? 0.0 : -b + sqrt(h);
 }
+int tierSteps(int low, int med, int high, int ultra) {
+  float t = uFlags.x;
+  return t < 0.5 ? low : t < 1.5 ? med : t < 2.5 ? high : ultra;
+}
 bool marchCoarse(vec3 ro, vec3 rd, float tMax, float eps, int steps, float lift, out float t) {
   t = 0.0;
   float d = 1.0;
@@ -92,6 +96,27 @@ bool refine(vec3 ro, vec3 rd, inout float t, out int which, int steps) {
     if (dot(uPlanes[i].xyz, p) - uPlanes[i].w > H_MIN - 0.00005) { near = true; c = min(c, abs(dot(uPlanes[i].xyz, rd))); }
   }
   if (!near) { which = -1; return true; }
+  int only = -1, count = 0;
+  for (int i = 0; i < ${MAX_PLANES}; i++) {
+    if (i >= uPlaneCount) break;
+    if (dot(uPlanes[i].xyz, p) - uPlanes[i].w > H_MIN - 0.0008) { only = i; count++; }
+  }
+  if (count == 1 && envelope(p) < -0.0015) {
+    vec4 pl = uPlanes[only];
+    float dn = -dot(pl.xyz, rd);
+    if (dn > 0.2) {
+      float s0 = dot(pl.xyz, ro) - pl.w;
+      float tt = s0 / dn;
+      int iters = tierSteps(2, 3, 3, 4);
+      for (int k = 0; k < 4; k++) {
+        if (k >= iters) break;
+        tt = (s0 - cutHeight(ro + rd * tt, pl)) / dn;
+      }
+      t = max(tt, t);
+      which = only;
+      return true;
+    }
+  }
   float f0 = fine(p, which);
   if (f0 <= 0.0) return true;
   float dt = min((H_MAX - H_MIN) / max(c, 0.01), 0.006) / float(steps);
@@ -133,19 +158,14 @@ bool refine(vec3 ro, vec3 rd, inout float t, out int which, int steps) {
   return true;
 }
 float pixelScale() { return 2.0 / (uProj[1][1] * uResolution.y); }
-vec3 reliefNormal(vec3 p, int which, float e) {
+vec3 reliefNormal(vec3 p, int which, float e, float h0) {
   vec4 pl = uPlanes[which];
   vec3 n = pl.xyz;
   vec3 t1 = normalize(abs(n.y) < 0.9 ? cross(n, vec3(0, 1, 0)) : cross(n, vec3(1, 0, 0)));
   vec3 t2 = cross(n, t1);
-  float h0 = cutHeight(p, pl);
   float h1 = cutHeight(p + t1 * e, pl);
   float h2 = cutHeight(p + t2 * e, pl);
   return normalize(n - t1 * (h1 - h0) / e - t2 * (h2 - h0) / e);
-}
-int tierSteps(int low, int med, int high, int ultra) {
-  float t = uFlags.x;
-  return t < 0.5 ? low : t < 1.5 ? med : t < 2.5 ? high : ultra;
 }
 `;
 
@@ -206,13 +226,13 @@ void main() {
   vec3 world = wp.xyz / wp.w;
   vec3 p = (uInvModel * vec4(world, 1.0)).xyz;
   int which = -1;
-  float best = envelope(p);
+  float best = envelope(p), hw = 0.0;
   for (int i = 0; i < ${MAX_PLANES}; i++) {
     if (i >= uPlaneCount) break;
     float s = dot(uPlanes[i].xyz, p) - uPlanes[i].w;
     if (s <= H_MIN) continue;
-    float f = s - cutHeight(p, uPlanes[i]);
-    if (f > best) { best = f; which = i; }
+    float h = cutHeight(p, uPlanes[i]);
+    if (s - h > best) { best = s - h; which = i; hw = h; }
   }
   vec3 Nr = which < 0 ? envelopeNormal(p) : uPlanes[which].xyz;
   SurfaceInput si;
@@ -226,7 +246,7 @@ void main() {
   si.pixel = distance(uCamPos.xyz, world) * pixelScale();
   Surface s;
   if (which < 0) s = rindSurface(si);
-  else s = cutSurface(si, uPlanes[which], reliefNormal(p, which, max(si.pixel * 0.7, 0.00003)));
+  else s = cutSurface(si, uPlanes[which], reliefNormal(p, which, max(si.pixel * 0.7, 0.00003), hw));
   vec3 diffuse, specular;
   shadeSurface(s, si, diffuse, specular);
   outDiffuse = vec4(diffuse * OUTPUT_SCALE, encodeProfile(s));
