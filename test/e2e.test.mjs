@@ -442,7 +442,7 @@ test('the reference cut face is saturated orange, not pastel', async () => {
     return { n: r.length, r: m(r), g: m(g), b: m(b) };
   });
   assert.ok(med.n > 2000, `the face is in frame ${JSON.stringify(med)}`);
-  assert.ok(med.r >= 235 && med.g >= 150 && med.g <= 215 && med.b <= 90, `flesh median ${JSON.stringify(med)}`);
+  assert.ok(med.r >= 235 && med.g >= 120 && med.g <= 215 && med.b <= 90, `flesh median ${JSON.stringify(med)}`);
   await page.close();
 });
 

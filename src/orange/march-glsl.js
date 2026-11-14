@@ -108,7 +108,7 @@ bool refine(vec3 ro, vec3 rd, inout float t, out int which, int steps) {
     if (dn > 0.2) {
       float s0 = dot(pl.xyz, ro) - pl.w;
       float tt = s0 / dn;
-      int iters = tierSteps(2, 2, 3, 4);
+      int iters = tierSteps(2, 2, 3, 3);
       for (int k = 0; k < 4; k++) {
         if (k >= iters) break;
         tt = (s0 - cutHeight(ro + rd * tt, pl)) / dn;
@@ -200,7 +200,7 @@ void main() {
   float t;
   if (!marchCoarse(ro, rd, tMax, eps, tierSteps(24, 32, 40, 48), H_MAX, t)) discard;
   int which;
-  if (!refine(ro, rd, t, which, tierSteps(4, 4, 6, 8))) discard;
+  if (!refine(ro, rd, t, which, tierSteps(4, 4, 5, 6))) discard;
   vec3 p = ro + rd * t;
   vec3 Nr = which < 0 ? envelopeNormal(p) : uPlanes[which].xyz;
   vec4 w = uModel * vec4(p, 1.0);
