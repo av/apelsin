@@ -168,7 +168,7 @@ Surface orangeRind(SurfaceInput si) {
   albedo = mix(albedo, oBlush.rgb, blushMask * oBlush.w);
   float speck = oBlush.w > 0.4 ? step(0.82, c.id.z) * pit * detail * (0.4 + blushMask) : 0.0;
   albedo = mix(albedo, oBlush.rgb * 0.8, min(speck, 1.0));
-  albedo *= mix(vec3(1.0), vec3(0.95, 0.91, 0.88), pit * detail);
+  albedo *= mix(vec3(1.0), vec3(0.97, 0.93, 0.9), pit * detail);
   albedo *= 1.0 - 0.04 * (1.0 - detail);
   float dot1 = step(0.996, c.id.z) * (1.0 - smoothstep(0.12, 0.2, c.t1)) * detail;
   albedo = mix(albedo, vec3(0.2, 0.08, 0.02), dot1 * 0.7);
@@ -254,7 +254,7 @@ Surface orangeRind(SurfaceInput si) {
   s.f0 = vec3(0.035);
   s.clearcoat = clear;
   s.clearcoatRoughness = ccRough;
-  s.cavity = mix(1.0, 0.85, pit * detail) * cav;
+  s.cavity = mix(1.0, 0.9, pit * detail) * cav;
   s.sssProfile = 1.0;
   s.sssWidth = 0.45;
   s.sssColor = oRind.rgb * vec3(0.35, 0.16, 0.04);
@@ -291,9 +291,10 @@ Surface orangeInterior(SurfaceInput si) {
   float peel = tf + tp * (0.9 + 0.2 * pv.x);
   float yN = p.y / oShape.y;
   float coreBase = oLayers.z * (0.75 + 0.6 * yN * yN);
-  float torn = 0.6 * vnoise(vec3(cos(psi), sin(psi), p.y * 80.0) * 3.0 + oNoise.xyz) + 0.4 * vnoise(vec3(cos(psi), sin(psi), p.y * 200.0) * 9.0 + oNoise.zxy);
+  float torn = 0.5;
+  if (rho < coreBase * 2.0) torn = 0.6 * vnoise(vec3(cos(psi), sin(psi), p.y * 80.0) * 3.0 + oNoise.xyz) + 0.4 * vnoise(vec3(cos(psi), sin(psi), p.y * 200.0) * 9.0 + oNoise.zxy);
   float coreR = coreBase * (0.62 + 0.75 * torn);
-  float wave = (oSeg.y * sin(p.y * 70.0 + rho * 110.0 + oNoise.x) + oSeg.y * 1.2 * (vnoise(p * 55.0 + oNoise.xyz) - 0.5)) * smoothstep(0.0, 0.012, rho);
+  float wave = (oSeg.y * sin(p.y * 70.0 + rho * 110.0 + oNoise.x) + oSeg.y * 1.2 * (pv.x - 0.5)) * smoothstep(0.0, 0.012, rho);
   int seg; float rel, segW, edge;
   orangeSegment(psi + wave, seg, rel, segW, edge);
   float fseg = float(seg);
@@ -324,14 +325,14 @@ Surface orangeInterior(SurfaceInput si) {
     float fanR = mix(rho, oShape.x * 0.7, 0.55);
     float fan = fanR / max(rho, 1e-4);
     vec3 q = vec3(sAlong / L, rel * fanR / W, wAcross / Wa) + vec3(fseg * 13.7, fseg * 3.1, fseg * 5.3);
-    float bend = vnoise(vec3(q.x * 0.55, q.y * 0.2, q.z * 0.3) + 4.0) - 0.5;
+    float bend = 0.3 * sin(q.x * 0.9 + q.z * 0.6 + fseg * 2.1) + 0.2 * sin(q.x * 2.3 - q.y * 0.4 + fseg);
     q.y += bend * 0.9;
     float vfw = px / W;
     float vdetail = 1.0 - smoothstep(0.2, 0.6, vfw);
     Ves v = vesicleCells(q);
     float f1 = min(v.f1, 1.2);
     float wallW = 0.05 + vfw * 0.9;
-    float wallVar = smoothstep(0.25, 0.75, vnoise(q * vec3(1.2, 4.0, 4.0) + 17.0));
+    float wallVar = smoothstep(0.15, 0.85, fract(v.id.x * 7.31 + v.id.y * 3.7));
     float wallLine = (1.0 - smoothstep(wallW * 0.25, wallW, v.f2 - v.f1)) * min(0.05 / wallW * 1.2, 1.0) * (0.15 + 0.85 * wallVar);
     wallK = wallLine * vdetail * (1.0 - 0.75 * smoothstep(0.55, 0.9, abs(v.m.x) / max(v.f1, 1e-3)));
     float domeD = inversesqrt(max(1.0 - min(f1 * f1, 1.0), 0.04));
@@ -345,9 +346,11 @@ Surface orangeInterior(SurfaceInput si) {
     float sB = 0.00045 * (0.7 + 0.6 * fract(fseg * 0.73 + oRind.w));
     float sR = sin(3.14159 * radial);
     gN += sB * (-2.0 * uu / hw * sR * ePsi + (1.0 - uu * uu) * 3.14159 * cos(3.14159 * radial) / span * rhoHat);
-    float mdet = 1.0 - smoothstep(0.25, 0.7, px * 6000.0);
-    vec4 micro = noiseD(vec3(dot(p, aHat) * 2500.0, dot(p, ePsi) * 7000.0, dot(p, xHat) * 7000.0) + fseg);
-    gN += (micro.y * aHat * 2500.0 + micro.z * ePsi * 7000.0 + micro.w * xHat * 7000.0) * 0.000028 * mdet;
+    float mdet = (1.0 - smoothstep(0.25, 0.7, px * 6000.0)) * step(1.5, tier);
+    if (mdet > 0.0) {
+      vec4 micro = noiseD(vec3(dot(p, aHat) * 2500.0, dot(p, ePsi) * 7000.0, dot(p, xHat) * 7000.0) + fseg);
+      gN += (micro.y * aHat * 2500.0 + micro.z * ePsi * 7000.0 + micro.w * xHat * 7000.0) * 0.000028 * mdet;
+    }
     vec3 flesh = fleshColour(radial, v.id, fseg);
     float inner = smoothstep(0.15, 1.0, f1);
     flesh *= mix(vec3(0.9, 0.84, 0.74), vec3(1.05, 1.08, 1.12), mix(0.5, inner, vdetail));
@@ -364,15 +367,15 @@ Surface orangeInterior(SurfaceInput si) {
       vec3 refr = refract(-Vr, Nf, 0.74);
       vec3 dp = refr * (0.0016 / max(-dot(refr, Nf), 0.35));
       vec3 qd = q + vec3(dot(dp, aHat) / L, dot(dp, ePsi) * fan / W, dot(dp, xHat) / Wa);
-      deep = vnoise(qd * vec3(1.3, 2.2, 2.2) + 31.0);
-      float rid = 1.0 - abs(2.0 * vnoise(qd * vec3(0.9, 1.7, 1.7) + 57.0) - 1.0);
+      deep = vnoise(qd * vec3(1.1, 2.0, 2.0) + 31.0);
+      float rid = 1.0 - abs(2.0 * deep - 1.0);
       deepWall = smoothstep(0.82, 0.97, rid) * vdetail;
     }
     flesh *= mix(0.86, 1.06, deep);
     flesh = mix(flesh, wallCol, deepWall * 0.3);
     albedo = mix(flesh, wallCol, wallK * 0.8);
     albedo = mix(albedo, albedo * vec3(0.97, 0.9, 0.75), ruptured);
-    float film = smoothstep(0.35, 0.65, vnoise(p * 170.0 + oNoise.zyx));
+    float film = smoothstep(0.35, 0.65, pv.x * 0.75 + 0.25 * v.id.z);
     rough = mix(0.045, 0.16, wallK) + 0.08 * (1.0 - vdetail);
     rough = mix(rough, 0.035, ruptured);
     clear = mix(0.1, 0.55, max(film, ruptured));
@@ -483,8 +486,8 @@ Surface orangeInterior(SurfaceInput si) {
     float gdet = 1.0 - smoothstep(0.35, 0.9, gfw);
     float tdist = gl.t1 * gscale;
     float tScale = tf / 0.0013;
-    float gRad = (0.26 + 0.2 * gl.id.y) * 0.001 * tScale;
-    float gDepth = tf * (0.4 + 0.4 * gl.id.x);
+    float gRad = (0.18 + 0.3 * gl.id.y * gl.id.y) * 0.001 * tScale;
+    float gDepth = tf * (0.3 + 0.5 * gl.id.x);
     float gRadial = gRad * 1.4;
     float ge = length(vec2(tdist / gRad, (depth - gDepth) / gRadial));
     glandK = (1.0 - smoothstep(0.85, 1.0 + px / gRad, ge)) * gdet * step(0.00012, depth);
@@ -501,7 +504,7 @@ Surface orangeInterior(SurfaceInput si) {
     flavCol *= 0.95 + 0.1 * vnoise(p * 6000.0);
     flavCol = mix(flavCol, vec3(0.95, 0.56, 0.08), toothZone * 0.55);
     vec3 glandCol = mix(vec3(0.973, 0.68, 0.04), vec3(0.9, 0.5, 0.03), smoothstep(0.6, 1.0, ge));
-    flavCol = mix(flavCol, glandCol, glandK * 0.85);
+    flavCol = mix(flavCol, glandCol, glandK * (0.35 + 0.35 * gl.id.z));
     float yZone = 1.0 - smoothstep(boundary, boundary + 0.0006 + 0.0003 * gl.id.y, depth);
     vec3 pithOuter = vec3(0.913, 0.863, 0.22) * mix(vec3(1.0), oPith.rgb / vec3(0.947, 0.88, 0.546), 0.5);
     vec3 pithCol = mix(oPith.rgb, vec3(0.965, 0.896, 0.624) * oPith.rgb / vec3(0.947, 0.88, 0.546), smoothstep(peel - 0.0012, peel, depth));
