@@ -1,5 +1,5 @@
 import { v3 } from './math.js';
-import { raycastPiece, restToWorld } from './orange/piece.js';
+import { raycastPiece } from './orange/piece.js';
 
 export const TOOL_NAMES = ['knife', 'hand', 'squeeze'];
 

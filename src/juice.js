@@ -1,7 +1,7 @@
 import { program, use, set, fbo, target, formats, FULLSCREEN_VS, fullscreen, bind } from './gl.js';
 import { FRAME_UBO, NOISE, SURFACE, LIGHTING } from './shaders/common.js';
 import { shapeRadius } from './orange/mesh.js';
-import { quat, v3 } from './math.js';
+import { v3 } from './math.js';
 import { worldToRest, restToWorld, restDirToWorld } from './orange/piece.js';
 
 const MAX = 2000;
@@ -36,8 +36,8 @@ void main() {
   vec3 Nv = mat3(uView) * N;
   vec2 uv = gl_FragCoord.xy * uResolution.zw - Nv.xy * 0.035 * (1.0 - NoV * 0.5);
   vec3 behind = texture(uOpaque, clamp(uv, vec2(0.001), vec2(0.999))).rgb;
-  vec3 absorb = vec3(1.0, 0.62, 0.18);
-  vec3 refr = behind * mix(absorb, vec3(1.0), 0.35) * 0.96;
+  float path = mix(0.45, 1.0, NoV);
+  vec3 refr = behind * pow(vec3(0.97, 0.74, 0.36), vec3(path)) * 0.97;
   float F = 0.02 + 0.98 * pow(1.0 - NoV, 5.0);
   vec3 R = reflect(-V, N);
   vec3 refl = envSpec(uEnvCube, R, 0.04) * uEnvParams.x + envSpec(uKeyCube, R, 0.03) * uEnvParams.y;
@@ -277,6 +277,5 @@ export function createJuice(gl, rng = Math.random) {
       renderWetness(dt);
     },
     clear() { count = 0; splats.length = 0; wetDirty = true; },
-    hasWet() { return true; },
   };
 }
