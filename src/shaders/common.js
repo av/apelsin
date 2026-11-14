@@ -243,6 +243,9 @@ void shadeSurface(Surface s, SurfaceInput si, out vec3 diffuse, out vec3 specula
   shadow = keyShadow(si.world, Ng);
   ambient = shEnv(N) * envI * (ao + bounce * (1.0 - ao) * 0.45);
 #endif
+  float pool = mix(1.0, uKeyShape.z * uKeyShape.z / (uKeyShape.z * uKeyShape.z + dot(si.world.xz, si.world.xz)), uKeyShape.w);
+  envI *= pool; keyI *= pool;
+  ambient *= pool;
   vec3 keyIrr = shKey(L) * keyI;
   vec3 keyDiff = shKey(N) * keyI * shadow;
   float NoL = dot(N, L);

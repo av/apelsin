@@ -133,7 +133,7 @@ export function createRenderer(gl, canvas, { tier = 'high' } = {}) {
     d.set(shadows.state.ground, F.ground);
     d.set([frame.shadowCasters && shadows.ground ? 1 : 0, ...r.fleshTint], F.ground2);
     d.set([...(occ.mfp || [0.009, 0.0032, 0.0012]), occ.leak ?? 0.5], F.occluderMfp);
-    d.set([key.tanX, key.tanY, 0, 0], F.keyShape);
+    d.set([key.tanX, key.tanY, ...(scene.pool || [1, 0])], F.keyShape);
     frameUbo.upload();
   }
 
@@ -211,7 +211,7 @@ export function createRenderer(gl, canvas, { tier = 'high' } = {}) {
       },
     },
     { name: 'taa', enabled: (ctx) => ctx.tier.taa, run: (ctx) => post.taa(ctx) },
-    { name: 'dof', enabled: (ctx) => ctx.frame.macro, run: (ctx) => post.dof(ctx) },
+    { name: 'dof', enabled: (ctx) => ctx.dof, run: (ctx) => post.dof(ctx) },
     { name: 'bloom', enabled: (ctx) => ctx.tier.bloom, run: (ctx) => post.bloom(ctx) },
     { name: 'tonemap', run: (ctx) => { if (r.debugTexture) { ctx.color = r.debugTexture(); ctx.bloom = null; } post.tonemap(ctx); } },
   ];
@@ -253,7 +253,7 @@ export function createRenderer(gl, canvas, { tier = 'high' } = {}) {
       gl, renderer: r, frame, camera, drawables, tier: r.tier, targets: r.targets, fbos: r.fbos, ibl, post,
       width: r.width, height: r.height, ao: null, color: null, bloom: null, black, white,
       grade, exposure: r.exposure * (frame.exposure ?? 1), tonemapMode: grade.tonemap || r.tonemapMode, resetHistory: r.resetHistory,
-      focus: frame.focus || 0.4, focusUv: frame.macro ? focusUv(frame, camera, casters) : [0.5, 0.5], fStop: frame.fStop || r.scene.fStop || 4,
+      focus: frame.focus || 0.4, dof: !!(frame.macro || r.scene.dof), focusUv: focusUv(frame, camera, casters), fStop: frame.fStop || (frame.macro ? 2.8 : r.scene.dof || 4),
     };
     gl.disable(gl.CULL_FACE);
     gl.disable(gl.BLEND);

@@ -25,30 +25,56 @@ function coveMesh() {
   return quadStrip(profile, -5, 5);
 }
 
-function boxMesh([sx, sy, sz], [cx, cy, cz]) {
-  const data = [];
-  const faces = [
-    [[1, 0, 0], [0, 0, -1], [0, 1, 0]], [[-1, 0, 0], [0, 0, 1], [0, 1, 0]],
-    [[0, 1, 0], [1, 0, 0], [0, 0, -1]], [[0, -1, 0], [1, 0, 0], [0, 0, 1]],
-    [[0, 0, 1], [1, 0, 0], [0, 1, 0]], [[0, 0, -1], [-1, 0, 0], [0, 1, 0]],
-  ];
-  const h = [sx / 2, sy / 2, sz / 2];
-  for (const [n, u, v] of faces) {
-    const corner = (a, b) => [0, 1, 2].map((k) => cx * (k === 0) + cy * (k === 1) + cz * (k === 2) + (n[k] + u[k] * a + v[k] * b) * h[k]);
-    const p = [corner(-1, -1), corner(1, -1), corner(1, 1), corner(-1, 1)];
-    for (const i of [0, 1, 2, 0, 2, 3]) data.push(...p[i], ...n, 0);
-  }
-  return new Float32Array(data);
-}
-
-function planeMesh(size, y) {
+function planeMesh(size, y, z0 = -size, z1 = size) {
   return new Float32Array([
-    -size, y, -size, 0, 1, 0, 0, -size, y, size, 0, 1, 0, 0, size, y, size, 0, 1, 0, 0,
-    -size, y, -size, 0, 1, 0, 0, size, y, size, 0, 1, 0, 0, size, y, -size, 0, 1, 0, 0,
+    -size, y, z0, 0, 1, 0, 0, -size, y, z1, 0, 1, 0, 0, size, y, z1, 0, 1, 0, 0,
+    -size, y, z0, 0, 1, 0, 0, size, y, z1, 0, 1, 0, 0, size, y, z0, 0, 1, 0, 0,
   ]);
 }
 
+function wallMesh(z, x0, x1, y0, y1) {
+  return new Float32Array([
+    x0, y0, z, 0, 0, 1, 0, x1, y0, z, 0, 0, 1, 0, x1, y1, z, 0, 0, 1, 0,
+    x0, y0, z, 0, 0, 1, 0, x1, y1, z, 0, 0, 1, 0, x0, y1, z, 0, 0, 1, 0,
+  ]);
+}
+
+function roundedBoardMesh([sx, sy, sz], top, corner = 0.014, bevel = 0.004, segments = 6) {
+  const data = [];
+  const push = (p, n) => data.push(p[0], p[1], p[2], n[0], n[1], n[2], 0);
+  const hx = sx / 2 - corner, hz = sz / 2 - corner;
+  const ring = [];
+  [[hx, hz], [-hx, hz], [-hx, -hz], [hx, -hz]].forEach(([cx, cz], k) => {
+    for (let i = 0; i <= segments; i++) {
+      const a = (k + i / segments) * Math.PI / 2;
+      ring.push([cx + Math.cos(a) * corner, cz + Math.sin(a) * corner, Math.cos(a), Math.sin(a)]);
+    }
+  });
+  const profile = [[0, top - sy, 1, 0], [0, top - bevel, 1, 0]];
+  for (let i = 1; i <= segments; i++) {
+    const a = (i / segments) * Math.PI / 2;
+    profile.push([bevel * (1 - Math.cos(a)), top - bevel + Math.sin(a) * bevel, Math.cos(a), Math.sin(a)]);
+  }
+  const vert = (r, p) => [r[0] - r[2] * p[0], p[1], r[1] - r[3] * p[0]];
+  const norm = (r, p) => [r[2] * p[2], p[3], r[3] * p[2]];
+  for (let i = 0; i < ring.length; i++) {
+    const r0 = ring[i], r1 = ring[(i + 1) % ring.length];
+    for (let j = 0; j < profile.length - 1; j++) {
+      const p0 = profile[j], p1 = profile[j + 1];
+      push(vert(r0, p0), norm(r0, p0)); push(vert(r1, p0), norm(r1, p0)); push(vert(r1, p1), norm(r1, p1));
+      push(vert(r0, p0), norm(r0, p0)); push(vert(r1, p1), norm(r1, p1)); push(vert(r0, p1), norm(r0, p1));
+    }
+  }
+  const inner = ring.map((r) => vert(r, profile[profile.length - 1]));
+  for (let i = 1; i < inner.length - 1; i++) { push(inner[0], [0, 1, 0]); push(inner[i], [0, 1, 0]); push(inner[i + 1], [0, 1, 0]); }
+  return new Float32Array(data);
+}
+
 const light = (dir, up, size, color, intensity, soft = 0.12) => ({ dir: v3.norm(dir), up, size, color, intensity, soft });
+
+export const WINDOW = { centre: [-0.16, 0.25, -0.36], half: [0.34, 0.24] };
+const windowDir = v3.norm(WINDOW.centre);
+const windowSize = [Math.atan(WINDOW.half[0] / v3.len(WINDOW.centre)), Math.atan(WINDOW.half[1] / v3.len(WINDOW.centre))];
 
 export const SCENES = {
   studio: {
@@ -71,36 +97,42 @@ export const SCENES = {
   kitchen: {
     label: 'Kitchen',
     env: {
-      top: [0.16, 0.13, 0.11], horizon: [0.26, 0.19, 0.13], bottom: [0.07, 0.05, 0.035],
+      top: [0.16, 0.15, 0.14], horizon: [0.2, 0.17, 0.14], bottom: [0.09, 0.07, 0.05],
       lights: [
-        light([-0.92, 0.36, -0.18], [0, 1, 0], [0.38, 0.4], [1, 0.86, 0.66], 14, 0.08),
-        light([-0.92, 0.36, -0.18], [0, 1, 0], [0.6, 0.55], [1, 0.9, 0.75], 0.5, 0.6),
-        light([0.15, 0.08, -1], [0, 1, 0], [1.1, 0.16], [0.78, 0.7, 0.6], 0.55, 0.3),
-        light([0.65, 0.45, -0.6], [0, 1, 0], [0.45, 0.25], [0.4, 0.22, 0.11], 0.35, 0.3),
-        light([0.75, 0.3, 0.6], [0, 1, 0], [0.5, 0.4], [0.85, 0.9, 1], 0.6, 0.4),
-        light([0.1, 1, 0.1], [0, 0, 1], [0.25, 0.25], [1, 0.92, 0.8], 2, 0.3),
+        light(windowDir, [0, 1, 0], windowSize, [1, 0.9, 0.76], 4.2, 0.06),
+        light([0.55, 0.75, 0.45], [0, 1, 0], [0.9, 0.7], [0.78, 0.86, 1], 0.6, 0.6),
+        light([0.35, 0.3, 1], [0, 1, 0], [0.9, 0.55], [1, 0.93, 0.86], 0.55, 0.6),
+        light([-0.9, 0.4, 0.3], [0, 1, 0], [0.5, 0.4], [0.9, 0.85, 0.8], 0.12, 0.5),
       ],
     },
-    envIntensity: 1, keyIntensity: 1, exposure: 1.0, vignette: 0.3, occluderTint: [0.6, 0.32, 0.16, 0.8], background: [3.2, 1, 1, 0],
+    envIntensity: 1, keyIntensity: 1, exposure: 1.0, background: [3, 1, 1, 0], groundReach: 0.07,
+    pool: [0.5, 0.45],
+    occluder: { bounce: 0.35, leak: 0.9, mfp: [0.009, 0.0032, 0.0012], bounceWhite: 0.15 },
+    grade: { white: 1.7, contrast: 1.12, saturation: 1.06, balance: [1.0, 0.99, 0.97], vignette: 0.22, grain: 0.007, bloom: 0.06, bloomThreshold: 1.6, toe: 0.002 },
+    dof: 8,
+    window: WINDOW,
     backdrop: [
-      { material: 'board', data: () => boxMesh([0.46, 0.026, 0.32], [0, -0.013, 0]) },
-      { material: 'counter', data: () => planeMesh(4, -0.026) },
+      { material: 'board', data: () => roundedBoardMesh([0.46, 0.026, 0.32], 0) },
+      { material: 'counter', data: () => planeMesh(1.6, -0.026, -0.36, 1.6) },
+      { material: 'wall', data: () => wallMesh(-0.36, -1.6, 1.6, -0.026, 1.4) },
     ],
-    colliders: [{ size: [0.46, 0.026, 0.32], centre: [0, -0.013, 0] }, { size: [10, 1, 10], centre: [0, -0.526, 0] }],
-    camera: { target: [0, 0.03, 0], yaw: 0.55, pitch: 0.32, distance: 0.44 },
+    colliders: [{ size: [0.46, 0.026, 0.32], centre: [0, -0.013, 0] }, { size: [10, 1, 10], centre: [0, -0.526, 0] }, { size: [10, 4, 1], centre: [0, 2, -0.86] }],
+    camera: { target: [0, 0.03, 0], yaw: 0.55, pitch: 0.3, distance: 0.44 },
     floorAt: (x, z) => (Math.abs(x) < 0.23 && Math.abs(z) < 0.16 ? 0 : -0.026),
   },
   dark: {
     label: 'Dark',
     env: {
-      top: [0.006, 0.006, 0.007], horizon: [0.004, 0.004, 0.0045], bottom: [0.001, 0.001, 0.001],
+      top: [0.004, 0.004, 0.0045], horizon: [0.002, 0.002, 0.0022], bottom: [0.0005, 0.0005, 0.0005],
       lights: [
-        light([-0.85, 0.38, 0.3], [0, 1, 0], [0.26, 0.18], [1, 0.95, 0.88], 30, 0.15),
-        light([0.55, 0.4, -0.75], [0, 1, 0], [0.35, 0.05], [0.9, 0.95, 1], 12, 0.2),
-        light([0.4, 0.3, 0.85], [0, 1, 0], [0.4, 0.3], [0.8, 0.88, 1], 0.25, 0.4),
+        light([-0.62, 0.42, -0.66], [0, 1, 0], [0.3, 0.12], [1, 0.94, 0.86], 26, 0.25),
+        light([0.5, 0.45, 0.75], [0, 1, 0], [0.7, 0.5], [0.85, 0.9, 1], 0.09, 0.6),
       ],
     },
-    envIntensity: 1, keyIntensity: 1, exposure: 1.35, vignette: 0.45, occluderTint: [0.5, 0.2, 0.1, 0.6], background: [3, 1, 1, 0],
+    envIntensity: 1, keyIntensity: 1, exposure: 1.3, background: [3, 1, 1, 0], groundReach: 0.07,
+    pool: [0.12, 1],
+    occluder: { bounce: 0.4, leak: 1.0, mfp: [0.009, 0.0032, 0.0012], bounceWhite: 0.05 },
+    grade: { white: 1.8, contrast: 1.12, saturation: 1.05, balance: [1.0, 0.99, 0.98], vignette: 0.35, grain: 0.008, bloom: 0.08, bloomThreshold: 1.2, toe: 0.004 },
     backdrop: [{ material: 'slate', data: () => planeMesh(4, 0) }],
     colliders: [{ size: [10, 1, 10], centre: [0, -0.5, 0] }],
     camera: { target: [0, 0.03, 0], yaw: 0.25, pitch: 0.26, distance: 0.42 },

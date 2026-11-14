@@ -151,5 +151,5 @@ export function createPost(gl) {
     fullscreen(gl);
   }
 
-  return { progs, resize, ssao, sss, combine, taa, dof, bloom, tonemap, copy, invalidate() { historyValid = false; focusValid = false; } };
+  return { progs, resize, ssao, sss, combine, taa, dof, bloom, tonemap, copy, get focusTarget() { return focusTargets[focusIndex]; }, invalidate() { historyValid = false; focusValid = false; } };
 }
