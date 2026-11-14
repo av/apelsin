@@ -14,7 +14,7 @@ import { bindPiece } from './orange/piece.js';
 
 export const TIERS = {
   low: { name: 'low', index: 0, scale: 0.6, shadow: 1024, ground: 192, ssao: false, aoSamples: 0, aoRadius: 0.04, sss: false, sssTaps: 0, keySamples: 3, taa: false, bloom: false, grainScale: 0.5, dofTaps: 24, dofRadius: 10 },
-  medium: { name: 'medium', index: 1, scale: 0.75, shadow: 2048, ground: 256, ssao: true, aoSamples: 8, aoRadius: 0.03, sss: true, sssTaps: 7, keySamples: 3, taa: true, bloom: true, sharpen: 0.25, dofTaps: 14, dofRadius: 14 },
+  medium: { name: 'medium', index: 1, scale: 0.67, shadow: 2048, ground: 256, ssao: true, aoSamples: 8, aoRadius: 0.03, sss: true, sssTaps: 7, keySamples: 3, taa: true, bloom: true, sharpen: 0.25, dofTaps: 14, dofRadius: 14 },
   high: { name: 'high', index: 2, scale: 1, shadow: 2048, ground: 512, ssao: true, aoSamples: 12, aoRadius: 0.03, sss: true, sssTaps: 11, keySamples: 5, taa: true, bloom: true, sharpen: 0.2, dofTaps: 32, dofRadius: 18 },
   ultra: { name: 'ultra', index: 3, scale: 1, shadow: 4096, ground: 768, ssao: true, aoSamples: 16, aoRadius: 0.03, sss: true, sssTaps: 16, keySamples: 7, taa: true, bloom: true, sharpen: 0.2, dofTaps: 48, dofRadius: 22 },
 };

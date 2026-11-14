@@ -108,7 +108,7 @@ bool refine(vec3 ro, vec3 rd, inout float t, out int which, int steps) {
     if (dn > 0.2) {
       float s0 = dot(pl.xyz, ro) - pl.w;
       float tt = s0 / dn;
-      int iters = tierSteps(2, 3, 3, 4);
+      int iters = tierSteps(2, 2, 3, 4);
       for (int k = 0; k < 4; k++) {
         if (k >= iters) break;
         tt = (s0 - cutHeight(ro + rd * tt, pl)) / dn;
@@ -200,7 +200,7 @@ void main() {
   float t;
   if (!marchCoarse(ro, rd, tMax, eps, tierSteps(24, 32, 40, 48), H_MAX, t)) discard;
   int which;
-  if (!refine(ro, rd, t, which, tierSteps(4, 5, 6, 8))) discard;
+  if (!refine(ro, rd, t, which, tierSteps(4, 4, 6, 8))) discard;
   vec3 p = ro + rd * t;
   vec3 Nr = which < 0 ? envelopeNormal(p) : uPlanes[which].xyz;
   vec4 w = uModel * vec4(p, 1.0);
@@ -228,12 +228,18 @@ void main() {
   vec3 p = (uInvModel * vec4(world, 1.0)).xyz;
   int which = -1;
   float best = envelope(p), hw = 0.0;
+  Anat Aw;
+  Sac Sw = noSac();
   for (int i = 0; i < ${MAX_PLANES}; i++) {
     if (i >= uPlaneCount) break;
     float s = dot(uPlanes[i].xyz, p) - uPlanes[i].w;
     if (s <= H_MIN) continue;
-    float h = cutHeight(p, uPlanes[i]);
-    if (s - h > best) { best = s - h; which = i; hw = h; }
+    vec3 q = onPlane(p, uPlanes[i]);
+    Anat A = anatomy(q);
+    Sac S = noSac();
+    if (fleshy(A)) S = sacsAt(A);
+    float h = heightAt(A, S, q, uPlanes[i]);
+    if (s - h > best) { best = s - h; which = i; hw = h; Aw = A; Sw = S; }
   }
   vec3 Nr = which < 0 ? envelopeNormal(p) : uPlanes[which].xyz;
   SurfaceInput si;
@@ -247,7 +253,7 @@ void main() {
   si.pixel = distance(uCamPos.xyz, world) * pixelScale();
   Surface s;
   if (which < 0) s = rindSurface(si);
-  else s = cutSurface(si, uPlanes[which], reliefNormal(p, which, max(si.pixel * 0.7, 0.00003), hw));
+  else s = cutSurface(si, uPlanes[which], reliefNormal(p, which, max(si.pixel * 0.7, 0.00003), hw), Aw, Sw);
   vec3 diffuse, specular;
   shadeSurface(s, si, diffuse, specular);
   outDiffuse = vec4(diffuse * OUTPUT_SCALE, encodeProfile(s));

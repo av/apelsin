@@ -79,7 +79,8 @@ Anat anatomy(vec3 p) {
   }
   A.coreR = coreBase * (0.62 + 0.8 * torn);
   A.dC = A.rho - A.coreR;
-  A.memHalf = (0.00005 + 0.00026 * exp(-max(A.dC, 0.0) / 0.0025)) * (0.6 + 0.8 * vnoise(vec3(A.rho * 420.0, p.y * 300.0, float(idx) * 7.3 + oRind.w * 11.0)));
+  float mv = sin(A.rho * 420.0 + float(idx) * 7.3 + oRind.w * 11.0) * sin(p.y * 300.0 + A.rho * 170.0 + float(idx) * 3.1);
+  A.memHalf = (0.00005 + 0.00026 * exp(-max(A.dC, 0.0) / 0.0025)) * (1.0 + 0.4 * mv);
   vec3 hs = hash33(vec3(A.fseg + 0.5, 3.5, oRind.w * 31.0));
   float kD = 0.0009 + 0.0006 * hs.x, kC = 0.0026 + 0.0022 * hs.y;
   A.inSeg = smin(smin(A.dS - A.memHalf, A.depthP - 0.00005, kD), A.dC - 0.00035, kC);
@@ -171,9 +172,9 @@ float sacHeight(Sac s, float ph, vec3 p, float w) {
 }
 
 vec3 onPlane(vec3 p, vec4 plane) { return p - plane.xyz * (dot(plane.xyz, p) - plane.w); }
-float cutHeight(vec3 p, vec4 plane) {
-  p = onPlane(p, plane);
-  Anat A = anatomy(p);
+bool fleshy(Anat A) { return A.depthO >= 0.0 && A.depthP >= 0.0 && A.dC >= 0.0; }
+Sac noSac() { Sac s; s.sdf = 1.0; s.second = 1.0; s.e = 9.0; s.id = vec3(0.5); s.t = 0.5; s.g = vec2(0.0); s.wx = 1e-4; s.wz = 1e-4; return s; }
+float heightAt(Anat A, Sac s, vec3 p, vec4 plane) {
   if (A.depthO < 0.0) return 0.0;
   if (A.depthP < 0.0) {
     if (A.depthO < A.flav * 0.9) return 0.0;
@@ -194,10 +195,17 @@ float cutHeight(vec3 p, vec4 plane) {
     float thick = smoothstep(0.0, -0.0006, A.inSeg);
     return mix(-0.00007, 0.00003, thick) + segBulge * 0.3;
   }
-  Sac s = sacsAt(A);
   float h = sacHeight(s, ph, p, w) + segBulge;
   float edge = smoothstep(0.0, 0.0004, A.inSeg);
   return clamp(mix(-0.00006, h, edge), H_MIN, H_MAX);
+}
+
+float cutHeight(vec3 p, vec4 plane) {
+  p = onPlane(p, plane);
+  Anat A = anatomy(p);
+  Sac s = noSac();
+  if (fleshy(A) && A.inSeg >= 0.0) s = sacsAt(A);
+  return heightAt(A, s, p, plane);
 }
 
 vec3 fleshBase(float w, vec3 id) {
@@ -234,9 +242,8 @@ float deepWalls(vec3 p, vec3 dirIn, int samples, vec3 own, out float septa) {
   return acc / max(wsum, 1e-6);
 }
 
-Surface cutSurface(SurfaceInput si, vec4 plane, vec3 Nrest) {
-  vec3 p = onPlane(si.rest, plane);
-  Anat A = anatomy(p);
+Surface cutSurface(SurfaceInput si, vec4 plane, vec3 Nrest, Anat A, Sac sacIn) {
+  vec3 p = A.p;
   float px = max(si.pixel, 1e-6);
   float tier = uFlags.x;
   vec3 n = plane.xyz;
@@ -317,7 +324,7 @@ Surface cutSurface(SurfaceInput si, vec4 plane, vec3 Nrest) {
     sssColor = vec3(0.95, 0.92, 0.75) * 0.32;
     trans = vec3(0.95, 0.92, 0.75) * vec3(0.22, 0.15, 0.04);
   } else {
-    Sac s = sacsAt(A);
+    Sac s = sacIn;
     vec3 id = s.id;
     vec3 flesh = fleshBase(w, id);
     vec3 wallCol = min(flesh * vec3(1.02, 1.14, 1.35), vec3(1.0));
@@ -337,7 +344,7 @@ Surface cutSurface(SurfaceInput si, vec4 plane, vec3 Nrest) {
     float juice = juiceLevel(p);
     float inner = clamp(s.e, 0.0, 1.0);
     flesh *= mix(1.03, 0.97, inner * inner);
-    int samples = tier < 0.5 ? 0 : tier < 1.5 ? 3 : tier < 2.5 ? 4 : 6;
+    int samples = tier < 0.5 ? 0 : tier < 1.5 ? 1 : tier < 2.5 ? 3 : 5;
     float septa = 0.0, deep = 0.35;
     if (samples > 0) {
       vec3 dirIn = refract(-Vr, n, 1.0 / 1.35);
@@ -354,7 +361,7 @@ Surface cutSurface(SurfaceInput si, vec4 plane, vec3 Nrest) {
     vec3 eRho = normalize(vec3(p.x, 0.0, p.z) + vec3(1e-7, 0.0, 0.0));
     vec3 eAlong = normalize(-eRho - vec3(0.0, 0.22, 0.0));
     vec3 eUp = normalize(cross(eAlong, ePsi));
-    float wrinkleK = (1.0 - smoothstep(0.00003, 0.00015, px)) * (1.0 - gap);
+    float wrinkleK = (1.0 - smoothstep(0.00003, 0.00015, px)) * (1.0 - gap) * step(1.5, tier);
     if (wrinkleK > 0.0) {
       vec3 qw = vec3(dot(p, eAlong) * 900.0, dot(p, ePsi) * 5200.0, dot(p, eUp) * 5200.0) + id * 50.0;
       vec4 wr = noiseD(qw);
