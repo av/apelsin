@@ -409,7 +409,7 @@ function rindUniforms(shape, p) {
   const tint = 0.92 + rnd() * 0.16;
   return {
     uSeed: [rnd(), rnd(), rnd(), rnd()],
-    uBase: [rind[0] * tint, rind[1] * (1.02 + rnd() * 0.26), rind[2]],
+    uBase: [rind[0] * tint * 0.86, rind[1] * tint * 0.84 * (0.92 + rnd() * 0.2), rind[2]],
     uStemCol: [...(p.rindStem || [0.591, 0.06, 0]), 0.35 + rnd() * 0.35],
     uPal: [0.12 + rnd() * 0.25, 0.08 + rnd() * 0.22, 0.06 + rnd() * 0.08, rnd() < 0.3 ? rnd() * 0.25 : 0],
     uUndul: [0.00005 + rnd() * 0.00004, 0.00006 + rnd() * 0.00003, 0.00004 + rnd() * 0.00002, 0.09 + rnd() * 0.04],
