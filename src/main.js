@@ -186,7 +186,7 @@ function boot() {
 
   async function loadPhysics() {
     const { createPhysics } = await import('./physics.js');
-    const [physics] = await Promise.all([createPhysics(), rindReady(gl)]);
+    const [physics] = await Promise.all([createPhysics(), rindReady(gl), renderer.ibl.ready()]);
     physics.on('impact', (piece, impulse, other) => {
       const m = piece.body ? piece.body.mass() : 0.1;
       audio.thud(impulse / Math.max(m, 0.005), other === 'piece' ? 'fruit' : app.surfaceAt(piece.position[0], piece.position[2]), m);
