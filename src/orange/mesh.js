@@ -50,8 +50,38 @@ const FACES = [
   [[0, 0, -1], [-1, 0, 0], [0, 1, 0]],
 ];
 
+const STUB_SIDES = 24;
+const STUB_TRIS = STUB_SIDES * 6;
+
+function stemStub(p, data, o) {
+  const top = shapeRadius(p, [0, 1, 0]);
+  const rs = 0.0016 + 0.0004 * ((p.hue * 7.3) % 1);
+  const rings = [[rs, top - 0.002, 0], [rs, top + 0.0011, 0], [rs * 0.78, top + 0.0015, 0.6], [0, top + 0.00165, 1]];
+  const ring = (k, i) => {
+    const [rr, y, up] = rings[k], a = (i / STUB_SIDES) * Math.PI * 2;
+    const c = Math.cos(a), s = Math.sin(a);
+    const wob = 1 + 0.06 * Math.sin(a * 3 + p.hue * 10);
+    const nrm = v3.norm([c * (1 - up), up + 0.001, s * (1 - up)]);
+    return [c * rr * wob, y, s * rr * wob, ...nrm, 0];
+  };
+  const put = (v) => { data.set(v, o); o += STRIDE; };
+  const bottom = [0, top - 0.002, 0, 0, -1, 0, 0];
+  for (let i = 0; i < STUB_SIDES; i++) {
+    const j = i + 1;
+    for (let k = 0; k < 2; k++) {
+      const a0 = ring(k, i), a1 = ring(k, j), b0 = ring(k + 1, i), b1 = ring(k + 1, j);
+      put(a0); put(b1); put(a1);
+      put(a0); put(b0); put(b1);
+    }
+    put(ring(2, i)); put(ring(3, i)); put(ring(2, j));
+    const d0 = ring(0, i), d1 = ring(0, j);
+    put([...d0.slice(0, 3), 0, -1, 0, 0]); put([...d1.slice(0, 3), 0, -1, 0, 0]); put(bottom);
+  }
+  return o;
+}
+
 export function orangeMesh(p, n = 60) {
-  const tris = 6 * n * n * 2;
+  const tris = 6 * n * n * 2 + STUB_TRIS;
   const data = new Float32Array(tris * 3 * STRIDE);
   let o = 0;
   const grid = new Float32Array((n + 1) * (n + 1) * 6);
@@ -72,6 +102,7 @@ export function orangeMesh(p, n = 60) {
       emit(i, j); emit(i + 1, j + 1); emit(i, j + 1);
     }
   }
+  o = stemStub(p, data, o);
   fixWinding(data);
   return { data, count: tris * 3 };
 }
@@ -82,7 +113,8 @@ function fixWinding(data) {
     const ax = data[t], ay = data[t + 1], az = data[t + 2];
     const e1 = [data[t + S] - ax, data[t + S + 1] - ay, data[t + S + 2] - az];
     const e2 = [data[t + 2 * S] - ax, data[t + 2 * S + 1] - ay, data[t + 2 * S + 2] - az];
-    if (v3.dot(v3.cross(e1, e2), [ax, ay, az]) < 0) {
+    const nrm = [data[t + 3] + data[t + S + 3] + data[t + 2 * S + 3], data[t + 4] + data[t + S + 4] + data[t + 2 * S + 4], data[t + 5] + data[t + S + 5] + data[t + 2 * S + 5]];
+    if (v3.dot(v3.cross(e1, e2), nrm) < 0) {
       for (let c = 0; c < S; c++) { const tmp = data[t + S + c]; data[t + S + c] = data[t + 2 * S + c]; data[t + 2 * S + c] = tmp; }
     }
   }
