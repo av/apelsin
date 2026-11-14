@@ -18,18 +18,6 @@ export function shapePoint(p, d) {
   return v3.scale(n, shapeRadius(p, n));
 }
 
-function shapeNormal(p, d) {
-  const t1 = v3.norm(Math.abs(d[1]) < 0.9 ? v3.cross(d, [0, 1, 0]) : v3.cross(d, [1, 0, 0]));
-  const t2 = v3.cross(d, t1);
-  const e = 0.004;
-  const s0 = shapePoint(p, d);
-  const a = v3.sub(shapePoint(p, v3.add(d, v3.scale(t1, e))), shapePoint(p, v3.sub(d, v3.scale(t1, e))));
-  const b = v3.sub(shapePoint(p, v3.add(d, v3.scale(t2, e))), shapePoint(p, v3.sub(d, v3.scale(t2, e))));
-  let n = v3.norm(v3.cross(a, b));
-  if (v3.dot(n, s0) < 0) n = v3.scale(n, -1);
-  return n;
-}
-
 const FACES = [
   [[1, 0, 0], [0, 0, -1], [0, 1, 0]],
   [[-1, 0, 0], [0, 0, 1], [0, 1, 0]],
@@ -39,46 +27,37 @@ const FACES = [
   [[0, 0, -1], [-1, 0, 0], [0, 1, 0]],
 ];
 
-const STUB_SIDES = 24;
-const STUB_TRIS = STUB_SIDES * 6;
+const POLE_K = 0.35;
 
-function stemStub(p, data, o) {
-  const top = shapeRadius(p, [0, 1, 0]);
-  const rs = 0.0016 + 0.0004 * ((p.hue * 7.3) % 1);
-  const rings = [[rs, top - 0.002, 0], [rs, top + 0.0011, 0], [rs * 0.78, top + 0.0015, 0.6], [0, top + 0.00165, 1]];
-  const ring = (k, i) => {
-    const [rr, y, up] = rings[k], a = (i / STUB_SIDES) * Math.PI * 2;
-    const c = Math.cos(a), s = Math.sin(a);
-    const wob = 1 + 0.06 * Math.sin(a * 3 + p.hue * 10);
-    const nrm = v3.norm([c * (1 - up), up + 0.001, s * (1 - up)]);
-    return [c * rr * wob, y, s * rr * wob, ...nrm, 0];
-  };
-  const put = (v) => { data.set(v, o); o += STRIDE; };
-  const bottom = [0, top - 0.002, 0, 0, -1, 0, 0];
-  for (let i = 0; i < STUB_SIDES; i++) {
-    const j = i + 1;
-    for (let k = 0; k < 2; k++) {
-      const a0 = ring(k, i), a1 = ring(k, j), b0 = ring(k + 1, i), b1 = ring(k + 1, j);
-      put(a0); put(b1); put(a1);
-      put(a0); put(b0); put(b1);
-    }
-    put(ring(2, i)); put(ring(3, i)); put(ring(2, j));
-    const d0 = ring(0, i), d1 = ring(0, j);
-    put([...d0.slice(0, 3), 0, -1, 0, 0]); put([...d1.slice(0, 3), 0, -1, 0, 0]); put(bottom);
-  }
-  return o;
+function warp(u, v, pole) {
+  if (!pole) return [u, v];
+  const r = Math.max(Math.abs(u), Math.abs(v));
+  if (r < 1e-9) return [u, v];
+  const k = POLE_K + (1 - POLE_K) * r * r;
+  return [u * k, v * k];
 }
 
-export function orangeMesh(p, n = 60) {
-  const tris = 6 * n * n * 2 + STUB_TRIS;
+export function orangeMesh(p, n = 64) {
+  const shape = shapeOf(p);
+  const tris = 6 * n * n * 2;
   const data = new Float32Array(tris * 3 * STRIDE);
   let o = 0;
   const grid = new Float32Array((n + 1) * (n + 1) * 6);
+  const M = n + 3, apron = new Float32Array(M * M * 3);
   for (const [f, u, v] of FACES) {
-    for (let j = 0; j <= n; j++) for (let i = 0; i <= n; i++) {
-      const a = Math.tan(((i / n) * 2 - 1) * Math.PI / 4), b = Math.tan(((j / n) * 2 - 1) * Math.PI / 4);
+    const pole = Math.abs(f[1]) > 0.5;
+    for (let j = 0; j < M; j++) for (let i = 0; i < M; i++) {
+      const [gu, gv] = warp(((i - 1) / n) * 2 - 1, ((j - 1) / n) * 2 - 1, pole);
+      const a = Math.tan(gu * Math.PI / 4), b = Math.tan(gv * Math.PI / 4);
       const d = v3.norm([f[0] + u[0] * a + v[0] * b, f[1] + u[1] * a + v[1] * b, f[2] + u[2] * a + v[2] * b]);
-      const pos = v3.scale(d, shapeRadius(p, d)), nor = shapeNormal(p, d);
+      const r = shape.envelope(d);
+      apron.set([d[0] * r, d[1] * r, d[2] * r], (j * M + i) * 3);
+    }
+    const P = (i, j) => { const k = (j * M + i) * 3; return [apron[k], apron[k + 1], apron[k + 2]]; };
+    for (let j = 0; j <= n; j++) for (let i = 0; i <= n; i++) {
+      const pos = P(i + 1, j + 1);
+      let nor = v3.norm(v3.cross(v3.sub(P(i + 2, j + 1), P(i, j + 1)), v3.sub(P(i + 1, j + 2), P(i + 1, j))));
+      if (v3.dot(nor, pos) < 0) nor = v3.scale(nor, -1);
       grid.set([...pos, ...nor], (j * (n + 1) + i) * 6);
     }
     const emit = (i, j) => {
@@ -87,11 +66,16 @@ export function orangeMesh(p, n = 60) {
       data[o++] = 0;
     };
     for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
-      emit(i, j); emit(i + 1, j); emit(i + 1, j + 1);
-      emit(i, j); emit(i + 1, j + 1); emit(i, j + 1);
+      const diag = (i < n / 2) === (j < n / 2);
+      if (diag) {
+        emit(i, j); emit(i + 1, j); emit(i + 1, j + 1);
+        emit(i, j); emit(i + 1, j + 1); emit(i, j + 1);
+      } else {
+        emit(i, j); emit(i + 1, j); emit(i, j + 1);
+        emit(i + 1, j); emit(i + 1, j + 1); emit(i, j + 1);
+      }
     }
   }
-  o = stemStub(p, data, o);
   fixWinding(data);
   return { data, count: tris * 3, params: p, planes: {} };
 }
