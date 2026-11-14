@@ -76,16 +76,16 @@ Anat anatomy(vec3 p) {
   A.u = clamp((a - left) / A.segW * 2.0 - 1.0, -1.0, 1.0);
   A.dS = max(min(a - left, right - a), 0.0) * A.rho;
   float yN = p.y / oShape.y;
-  float coreBase = oLayers.z * (0.44 + 0.4 * yN * yN);
+  float coreBase = oLayers.z * (0.36 + 0.34 * yN * yN);
   float torn = 0.5;
   if (A.rho < coreBase * 2.0) {
     vec2 cs = vec2(cos(A.psi), sin(A.psi));
-    torn = vnoise(vec3(cs * 2.3, p.y * 260.0) + oNoise.xyz) * 0.5 + vnoise(vec3(cs * 7.0, p.y * 700.0) + oNoise.zxy) * 0.35 + vnoise(vec3(cs * 19.0, p.y * 2100.0) + oNoise.yxz) * 0.15;
+    torn = vnoise(vec3(cs * 2.3, p.y * 260.0) + oNoise.xyz) * 0.5 + vnoise(vec3(cs * 7.0, p.y * 700.0) + oNoise.zxy) * 0.35 + vnoise(vec3(cs * 19.0, p.y * 600.0) + oNoise.yxz) * 0.15;
   }
-  A.coreR = coreBase * (0.4 + 1.15 * torn * torn);
+  A.coreR = coreBase * (0.55 + 0.9 * torn * torn);
   A.dC = A.rho - A.coreR;
   float mv = sin(A.rho * 420.0 + float(idx) * 7.3 + oRind.w * 11.0) * sin(p.y * 300.0 + A.rho * 170.0 + float(idx) * 3.1);
-  A.memHalf = (0.00007 + 0.00026 * exp(-max(A.dC, 0.0) / 0.0025)) * (1.0 + 0.45 * mv);
+  A.memHalf = (0.0001 + 0.00026 * exp(-max(A.dC, 0.0) / 0.0025)) * (1.0 + 0.45 * mv);
   vec3 hs = hash33(vec3(A.fseg + 0.5, 3.5, oRind.w * 31.0));
   float kD = 0.0009 + 0.0006 * hs.x, kC = 0.0055 + 0.003 * hs.y;
   A.inSeg = smin(smin(A.dS - A.memHalf, A.depthP - 0.00005, kD), A.dC - 0.00035, kC);
@@ -175,11 +175,12 @@ float sacHeight(Sac s, float ph, vec3 p, float w) {
   vec3 id = fract(s.id + ph);
   float inside = 1.0 - s.e * s.e;
   float tip = smoothstep(0.0, 0.25, s.t) * smoothstep(1.0, 0.8, s.t);
-  float dome = (0.000008 + 0.00003 * id.x) * smoothstep(0.0, 0.8, inside) * (0.4 + 0.6 * tip);
+  float dome = (0.000006 + 0.00002 * id.x) * inside * (0.4 + 0.6 * tip);
   if (id.y < 0.2 || (tip < 0.5 && id.y < 0.45)) dome = -(0.00003 + 0.00007 * id.z) * smoothstep(0.0, 0.6, inside);
   else if (id.y > 0.985) dome += 0.00015 * max(inside, 0.0);
-  float gap = -0.00004 - 0.00002 * w;
-  return s.sdf < 0.0 ? dome : mix(gap, -0.00001, juiceLevel(p));
+  float gap = -0.000012 - 0.00001 * w;
+  float edge = smoothstep(0.0, 0.00012, s.sdf);
+  return s.sdf < 0.0 ? dome : mix(0.0, mix(gap, -0.000004, juiceLevel(p)), edge);
 }
 
 vec3 onPlane(vec3 p, vec4 plane) { return p - plane.xyz * (dot(plane.xyz, p) - plane.w); }
@@ -251,8 +252,8 @@ vec3 fleshBase(float w, vec3 id) {
   vec3 outer = oFleshDeep.rgb, mid = oFlesh.rgb;
   vec3 inner = oFleshDeep.w >= 0.0 ? mix(mid, oFleshWall.rgb, oFleshDeep.w) : mix(mid, outer, -oFleshDeep.w);
   vec3 c = w < 0.45 ? mix(outer, mid, smoothstep(0.0, 0.45, w)) : mix(mid, inner, smoothstep(0.45, 1.0, w));
-  c *= 0.93 + 0.12 * id.x;
-  c.g *= 0.88 + 0.22 * id.z;
+  c *= 0.88 + 0.2 * id.x;
+  c.g *= 0.86 + 0.26 * id.z;
   return min(c * vec3(0.68, 0.48, 0.45), vec3(1.0));
 }
 
@@ -359,8 +360,12 @@ Surface cutSurface(SurfaceInput si, vec4 plane, vec3 Nrest, Anat A, Sac sacIn) {
     float holes = smoothstep(0.74, 0.86, pore.x) * (1.0 - smoothstep(0.00008, 0.0003, px));
     float voids = smoothstep(0.6, 0.72, vnoise(p * 1500.0 + oNoise.yxz) * 0.65 + vnoise(p * 4200.0 + oNoise.zyx) * 0.35);
     vec2 spc = sponge(p, normalize(vec3(p.x, 0.0, p.z) + 1e-7), 1700.0);
-    float fibre = vnoise(vec3(cs.x * 30.0 + A.rho * 9000.0, cs.y * 30.0, p.y * 260.0) + oNoise.xzy);
-    vec3 core = vec3(0.96, 0.94, 0.84) * (0.86 + 0.14 * fib) * (0.92 + 0.12 * fibre);
+    float fw = vnoise(vec3(cs.x * 4.0, cs.y * 4.0, p.y * 90.0) + oNoise.zyx) - 0.5;
+    float fibre = vnoise(vec3(cs.x * 12.0 + A.rho * 2600.0 + fw * 1.5, cs.y * 12.0 + fw, p.y * 110.0) + oNoise.xzy) * 0.65 + vnoise(vec3(cs.x * 25.0 + A.rho * 5200.0, cs.y * 25.0, p.y * 220.0) + oNoise.yxz) * 0.35;
+    fibre = smoothstep(0.25, 0.8, fibre);
+    float axial = 1.0 - abs(n.y);
+    vec3 core = vec3(0.9, 0.87, 0.74) * (0.88 + 0.12 * fib) * mix(0.9 + 0.14 * fibre, 0.74 + 0.32 * fibre, axial);
+    core = mix(core, mix(core, oFleshDeep.rgb * vec3(1.0, 1.1, 1.4) + 0.08, 0.35), axial * smoothstep(-0.0012, 0.0, A.dC));
     float soak = smoothstep(0.25, 0.75, vnoise(vec3(cs.x * 6.0 + A.rho * 2200.0, cs.y * 6.0, p.y * 150.0) + oNoise.yxz) * 0.6 + vnoise(vec3(cs.x * 17.0 + A.rho * 6000.0, cs.y * 17.0, p.y * 400.0) + oNoise.zyx) * 0.4);
     core = mix(core, vec3(0.95, 0.8, 0.5), smoothstep(0.0, 0.7, soak) * 0.35);
     core = mix(core, vec3(0.93, 0.86, 0.66), max(spc.x, voids) * 0.25);
@@ -408,7 +413,8 @@ Surface cutSurface(SurfaceInput si, vec4 plane, vec3 Nrest, Anat A, Sac sacIn) {
       if (dot(dirIn, dirIn) < 0.5) dirIn = -n;
       deep = deepWalls(p, dirIn, samples, s.id, septa);
     }
-    float lowF = vnoise(p * 220.0 + oNoise.yzx + A.fseg) * 0.65 + vnoise(p * 520.0 + oNoise.zxy) * 0.35;
+    float lowF = vnoise(p * 160.0 + oNoise.yzx + A.fseg) * 0.5 + vnoise(p * 420.0 + oNoise.zxy) * 0.3 + vnoise(p * 1100.0 + oNoise.xyz) * 0.2;
+    lowF = smoothstep(0.2, 0.8, lowF);
     flesh *= mix(vec3(1.0, 0.76, 0.45), vec3(1.0, 1.14, 1.3), lowF);
     flesh = mix(flesh * vec3(1.0, 0.93, 0.8), mix(flesh, wallCol, 0.35), smoothstep(0.08, 0.7, deep));
     flesh = mix(flesh, flesh * vec3(1.03, 1.1, 1.25), septa * 0.35);
@@ -418,25 +424,29 @@ Surface cutSurface(SurfaceInput si, vec4 plane, vec3 Nrest, Anat A, Sac sacIn) {
     float farK = smoothstep(0.00008, 0.0003, px);
     if (farK > 0.0) {
       float inside = 1.0 - smoothstep(0.55, 1.0, s.e);
-      albedo = mix(albedo, albedo * vec3(0.82, 0.66, 0.45), (1.0 - inside) * farK * 0.55);
-      gN -= gradS * min(s.wx, s.wz) * 0.45 * farK * inside;
+      float lobe = smoothstep(0.3, 0.7, vnoise(p * 1400.0 + id * 17.0));
+      albedo = mix(albedo, albedo * vec3(0.84, 0.7, 0.5), (1.0 - inside) * farK * 0.5 * (0.5 + 0.5 * lobe));
+      gN -= (ePsi * s.g.x) * min(s.wx, s.wz) * 0.3 * farK * inside * lobe;
     }
     vec3 eRho = normalize(vec3(p.x, 0.0, p.z) + vec3(1e-7, 0.0, 0.0));
     vec3 eAlong = normalize(-eRho - vec3(0.0, 0.22, 0.0));
     vec3 eUp = normalize(cross(eAlong, ePsi));
     float wrinkleK = (1.0 - smoothstep(0.00004, 0.0002, px)) * (1.0 - gap) * step(0.5, tier);
     if (wrinkleK > 0.0) {
-      vec3 qw = vec3(dot(p, eAlong) * 900.0, dot(p, ePsi) * 5200.0, dot(p, eUp) * 5200.0) + id * 50.0;
+      float al = dot(p, eAlong), ac = dot(p, ePsi), up = dot(p, eUp);
+      float warp = vnoise(vec3(al * 700.0, ac * 900.0, up * 900.0) + id * 31.0) - 0.5;
+      vec3 qw = vec3(ac * 5200.0 + warp * 2.2 + al * 260.0, up * 4300.0 - al * 190.0, al * 330.0) + id * 50.0;
       vec4 wr = noiseD(qw);
-      vec4 wr2 = noiseD(qw * vec3(2.1, 2.3, 2.3) + 17.0);
-      vec3 gw = (wr.y * 900.0 * eAlong + wr.z * 5200.0 * ePsi + wr.w * 5200.0 * eUp) * 0.000012 + (wr2.y * 1900.0 * eAlong + wr2.z * 12000.0 * ePsi + wr2.w * 12000.0 * eUp) * 0.000005;
-      gN += gw * wrinkleK * 1.6;
+      vec4 wr2 = noiseD(qw * vec3(2.3, 2.1, 1.7) + 17.0);
+      vec3 gw = (wr.x - 0.5) * 0.0 + (wr.y * 5200.0 * ePsi + wr.z * 4300.0 * eUp) * 0.000009 + (wr2.y * 12000.0 * ePsi + wr2.z * 9000.0 * eUp) * 0.0000035;
+      gN += (gw - n * dot(gw, n)) * wrinkleK * 1.4;
       float strand = smoothstep(0.35, 0.75, wr.x) * 0.6 + smoothstep(0.4, 0.8, wr2.x) * 0.4;
       albedo *= mix(vec3(1.0), mix(vec3(0.94, 0.86, 0.75), vec3(1.03, 1.1, 1.15), strand), wrinkleK * 0.8);
     }
     float memK = 1.0 - smoothstep(-0.00002, 0.00012 + px * 0.5, A.inSeg);
     float thick = smoothstep(0.0, -0.0005, A.inSeg);
-    float nearCore = 1.0 - smoothstep(0.0015, 0.003, A.dC);
+    float ax = 1.0 - abs(n.y);
+    float nearCore = (1.0 - smoothstep(mix(0.0022, 0.0008, ax), mix(0.0045, 0.0018, ax), A.dC)) * mix(1.0, 0.3, ax);
     float crumb = vnoise(p * 2600.0 + oNoise.zxy) * 0.6 + vnoise(p * 7000.0 + oNoise.xyz) * 0.4;
     float cvoid = smoothstep(0.62, 0.74, vnoise(p * 1500.0 + oNoise.yxz) * 0.65 + vnoise(p * 4200.0 + oNoise.zyx) * 0.35) * nearCore;
     vec2 spf = sponge(p, normalize(vec3(p.x, 0.0, p.z) + 1e-7), 1700.0);
@@ -445,7 +455,7 @@ Surface cutSurface(SurfaceInput si, vec4 plane, vec3 Nrest, Anat A, Sac sacIn) {
     float seen = smoothstep(0.25, 0.75, vnoise(vec3(A.rho * 600.0, p.y * 600.0, A.fseg * 3.7 + oRind.w)));
     memK *= mix(1.0, 0.75, smoothstep(0.85, 0.4, s.e) * (1.0 - thick));
     memK *= mix(1.0, 0.15, pow(abs(dot(n, ePsi)), 3.0) * (1.0 - nearCore));
-    vec3 memCol = mix(mix(albedo, albedo * vec3(1.05, 1.25, 1.7) + vec3(0.05, 0.05, 0.03), 0.5 + 0.45 * seen), fillCol, thick);
+    vec3 memCol = mix(mix(albedo, mix(albedo * vec3(1.05, 1.25, 1.7) + vec3(0.05, 0.05, 0.03), vec3(0.93, 0.82, 0.5), 0.5 * (1.0 - ax)), 0.5 + 0.45 * seen), fillCol, thick);
     albedo = mix(albedo, memCol, memK);
     float rupt = step(fract(id.y + ph), 0.2) * step(s.sdf, 0.0);
     float far = smoothstep(0.00008, 0.0003, px);
