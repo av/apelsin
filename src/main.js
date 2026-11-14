@@ -1,7 +1,7 @@
 import { createContext } from './gl.js';
 import { createRenderer, TIER_NAMES } from './renderer.js';
 import { createCamera } from './camera.js';
-import { SCENES, SCENE_NAMES } from './scenes.js';
+import { STUDIO } from './scenes.js';
 import { orangeParams, packOrange } from './orange/params.js';
 import { createWorld } from './world.js';
 import { createJuice } from './juice.js';
@@ -33,7 +33,6 @@ function boot() {
   if (!gl) return noWebGL('webgl2 unavailable');
 
   const state = {
-    scene: pick('scene', SCENE_NAMES, 'studio'),
     seed: params.has('seed') ? (parseInt(params.get('seed'), 10) >>> 0) : (Math.random() * 1e9) >>> 0,
     tool: 'knife', preset: 'whole', macro: false, slowmo: false,
     quality: pick('q', TIER_NAMES, phone ? 'medium' : 'high'), forcedQuality: TIER_NAMES.includes(params.get('q')),
@@ -46,39 +45,13 @@ function boot() {
   const audio = createAudio();
   const juice = createJuice(gl, rng);
   const world = createWorld(gl, { juice, audio });
-  juice.on('splat', (speed, r) => audio.drip(speed, r, app.surfaceAt()));
+  juice.on('splat', (speed, r) => audio.drip(speed, r));
 
   const app = {
     state, world, camera, juice, audio, renderer, physics: null,
-    get scene() { return SCENES[state.scene]; },
-    get sceneName() { return state.scene; },
+    get scene() { return STUDIO; },
     get seed() { return state.seed; },
     set preset(v) { state.preset = v; },
-    setScene(name) {
-      if (!SCENES[name]) return false;
-      state.scene = name;
-      const s = SCENES[name];
-      renderer.setScene(s);
-      world.floorAt = s.floorAt || (() => 0);
-      camera.floorY = Math.min(0, world.floorAt(1, 1));
-      camera.set({ ...s.camera }, TEST);
-      if (app.physics) app.physics.setColliders(s.colliders);
-      for (const p of world.pieces) world.place(p, [p.position[0], world.floorAt(p.position[0], p.position[2]), p.position[2]], p.rotation);
-      ui?.sync();
-      return true;
-    },
-    surfaceAt(x = 0, z = 0) {
-      if (state.scene === 'kitchen') return world.floorAt(x, z) >= -0.001 ? 'wood' : 'stone';
-      return state.scene === 'dark' ? 'slate' : 'paper';
-    },
-    applyJuiceTint() {
-      const tint = juice.tint;
-      for (const name of ['cove', 'board', 'counter', 'slate']) {
-        const prog = renderer.materialProgram(name);
-        gl.useProgram(prog.handle);
-        if (prog.uniforms.uJuiceTint) gl.uniform3fv(prog.uniforms.uJuiceTint, tint);
-      }
-    },
     settle(seconds = 3) {
       if (app.physics) app.physics.settle(world.pieces, seconds);
       else app.pendingSettle = true;
@@ -128,10 +101,12 @@ function boot() {
 
   const tools = createTools(canvas, overlay, app, gl);
   app.tools = tools;
-  world.surfaceAt = () => app.surfaceAt();
-  app.applyJuiceTint();
+  const cove = renderer.materialProgram('cove');
+  gl.useProgram(cove.handle);
+  gl.uniform3fv(cove.uniforms.uJuiceTint, juice.tint);
+  renderer.setScene(STUDIO);
+  camera.set({ ...STUDIO.camera }, TEST);
   const ui = createUI(app, { test: TEST });
-  app.setScene(state.scene);
   app.newOrange(state.seed);
   if (params.has('preset')) app.runPreset(pick('preset', PRESET_NAMES, 'whole'));
   ui.sync();
@@ -148,7 +123,7 @@ function boot() {
     }
     juice.update(sim, world.pieces, world.params, world.floorAt);
     juice.prepare(sim);
-    audio.rolling(world.pieces.reduce((s, p) => s + (p.contact === 'ground' && p.body && !p.body.isSleeping() ? p.rolling || 0 : 0), 0), app.surfaceAt());
+    audio.rolling(world.pieces.reduce((s, p) => s + (p.contact === 'ground' && p.body && !p.body.isSleeping() ? p.rolling || 0 : 0), 0));
     const b = world.bounds();
     renderer.render({
       camera, dt, time, drawables: [...world.drawables(), ...tools.drawables()],
@@ -180,7 +155,7 @@ function boot() {
     const physics = await createPhysics();
     physics.on('impact', (piece, impulse, other) => {
       const m = piece.body ? piece.body.mass() : 0.1;
-      audio.thud(impulse / Math.max(m, 0.005), other === 'piece' ? 'fruit' : app.surfaceAt(piece.position[0], piece.position[2]), m);
+      audio.thud(impulse / Math.max(m, 0.005), other === 'piece' ? 'fruit' : 'paper', m);
     });
     app.physics = physics;
     world.attachPhysics(physics, app.scene.colliders);
@@ -213,7 +188,7 @@ function boot() {
   window.apelsin = {
     ready,
     info: () => ({
-      pieces: world.pieces.length, cutFaces: world.cutFaces(), scene: state.scene, seed: state.seed,
+      pieces: world.pieces.length, cutFaces: world.cutFaces(), seed: state.seed,
       quality: state.quality, fps: Math.round(1000 / emaMs), gpu: gl.caps.gpu, droplets: juice.count, physicsReady: state.physicsReady,
       tool: state.tool, preset: state.preset, awake: app.physics ? app.physics.awake(world.pieces) : 0, errors: gl.errors.slice(),
       width: renderer.width, height: renderer.height, floatTargets: gl.caps.floatTargets,
@@ -227,7 +202,6 @@ function boot() {
     toggle: (key) => { if (!['slowmo', 'macro'].includes(key)) return false; app.toggle(key); return state[key]; },
     preset: (name) => app.runPreset(name),
     cut: (point, normal) => world.cut(point, normal),
-    setScene: (name) => app.setScene(name),
     newOrange: (seed) => { app.newOrange(seed); state.preset = 'whole'; ui.sync(); return world.pieces.length; },
     setTool: (name) => app.setTool(name),
     step: (frames = 1) => { for (let i = 0; i < frames; i++) frame(1 / 60); return window.apelsin.info(); },

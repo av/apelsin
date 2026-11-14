@@ -83,7 +83,6 @@ test('the page renders a whole orange on the studio cove without errors', async 
   const info = await page.evaluate(() => window.apelsin.info());
   assert.equal(info.pieces, 1);
   assert.equal(info.cutFaces, 0);
-  assert.equal(info.scene, 'studio');
   assert.equal(info.seed, 11);
   assert.equal(info.physicsReady, true);
   assert.ok(info.gpu.length > 0);
@@ -172,36 +171,18 @@ test('every preset performs real cuts and renders an orange composition', async 
     const px = await pixels(page, 5);
     assert.ok(px.all.orange > 0.03, `${name} shows orange (${px.all.orange})`);
   }
-  assert.equal((await page.evaluate(() => window.apelsin.info())).scene, 'studio');
   assert.deepEqual(page.errors, []);
   await page.close();
 });
 
 test('the preset url parameter composes the reference shot on studio white', async () => {
-  const page = await open('preset=reference&scene=dark&seed=4');
+  const page = await open('preset=reference&seed=4');
   const info = await page.evaluate(() => window.apelsin.info());
   assert.equal(info.preset, 'reference');
-  assert.equal(info.scene, 'studio');
   assert.equal(info.pieces, 2);
   const px = await pixels(page, 60);
   assert.ok(px.corner.r > 235 && px.corner.b > 230, 'background is white');
   assert.ok(px.all.orange > 0.12, `reference flesh coverage ${px.all.orange}`);
-  await page.close();
-});
-
-test('every scene renders and the dark scene is dark', async () => {
-  const page = await open('seed=2&preset=halves');
-  const corners = {};
-  for (const scene of ['studio', 'kitchen', 'dark']) {
-    assert.equal(await page.evaluate((s) => window.apelsin.setScene(s), scene), true);
-    const px = await pixels(page, 20);
-    assert.ok(px.all.orange > 0.02, `${scene} shows orange`);
-    corners[scene] = px.corner.r + px.corner.g + px.corner.b;
-  }
-  assert.ok(corners.dark < 200, `dark corner ${corners.dark}`);
-  assert.ok(corners.studio > 650, `studio corner ${corners.studio}`);
-  assert.equal(await page.evaluate(() => window.apelsin.setScene('nowhere')), false);
-  assert.deepEqual(page.errors, []);
   await page.close();
 });
 
@@ -231,7 +212,7 @@ test('screenshot returns a png of the canvas, also at twice the resolution', asy
   await page.close();
 });
 
-test('the toolbar and keyboard shortcuts drive presets, tools and scenes', async () => {
+test('the toolbar and keyboard shortcuts drive presets and tools', async () => {
   const page = await open('seed=6');
   await page.click('[data-preset="wedges"]');
   assert.equal((await page.evaluate(() => window.apelsin.info())).pieces, 8);
@@ -241,8 +222,6 @@ test('the toolbar and keyboard shortcuts drive presets, tools and scenes', async
   assert.equal((await page.evaluate(() => window.apelsin.info())).tool, 'hand');
   await page.click('[data-tool="squeeze"]');
   assert.equal((await page.evaluate(() => window.apelsin.info())).tool, 'squeeze');
-  await page.selectOption('#scene', 'dark');
-  assert.equal((await page.evaluate(() => window.apelsin.info())).scene, 'dark');
   await page.keyboard.press('n');
   assert.notEqual((await page.evaluate(() => window.apelsin.info())).seed, 6);
   assert.deepEqual(page.errors, []);
@@ -312,20 +291,6 @@ test('the reference shot is high key with warm contact shadows under the pieces'
   const s = await stats(page, 60);
   assert.ok(s.white > 0.45, `clipped white background fraction ${s.white}`);
   assert.ok(s.warm > 0.004, `warm shadow fraction ${s.warm}`);
-  assert.deepEqual(page.errors, []);
-  await page.close();
-});
-
-test('the kitchen shows a bright window behind the board and macro blurs the background', async () => {
-  const page = await open('scene=kitchen&preset=halves&seed=7&q=high', { width: 1280, height: 800 });
-  const kitchen = await stats(page, 60);
-  assert.ok(kitchen.top.bright > 0.05, `window brightness in the top band ${kitchen.top.bright}`);
-  await page.evaluate(() => window.apelsin.setScene('studio'));
-  await page.evaluate(() => window.apelsin.camera({ distance: 0.22, pitch: 0.45 }));
-  const sharp = await stats(page, 30);
-  await page.keyboard.press('m');
-  const blurred = await stats(page, 30);
-  assert.ok(blurred.all.grad < sharp.all.grad * 0.85, `macro depth of field softens out-of-focus detail ${sharp.all.grad} -> ${blurred.all.grad}`);
   assert.deepEqual(page.errors, []);
   await page.close();
 });
@@ -636,13 +601,6 @@ test('settled pieces touch the floor: no visible gap and no sinking', async () =
     await page.evaluate(() => window.apelsin.step(30));
     await check(name);
   }
-  for (const scene of ['kitchen', 'dark']) {
-    await page.evaluate((s) => window.apelsin.setScene(s), scene);
-    await page.evaluate(() => window.apelsin.preset('halves'));
-    await page.evaluate(() => window.apelsin.step(30));
-    await check(`${scene} halves`);
-  }
-  await page.evaluate(() => window.apelsin.setScene('studio'));
   await page.evaluate(() => window.apelsin.newOrange(21));
   await page.evaluate(() => window.apelsin.cut([0.01, 0.04, 0], [1, 0.15, 0.3]));
   await page.evaluate(() => window.apelsin.step(600));

@@ -21,9 +21,6 @@ function retune(f, type, freq, q, sr) {
 
 const SURFACES = {
   paper: { modes: [[105, 0.035, 1], [190, 0.02, 0.5]], noise: [520, 0.7, 0.045, 0.8], click: 0.08, roll: [260, 0.9] },
-  wood: { modes: [[210, 0.07, 1], [530, 0.035, 0.6], [1180, 0.018, 0.35], [2350, 0.008, 0.15]], noise: [1400, 1.2, 0.015, 0.5], click: 0.35, roll: [420, 1.1] },
-  stone: { modes: [[760, 0.03, 0.7], [1650, 0.016, 0.5], [3300, 0.007, 0.3], [170, 0.03, 0.6]], noise: [2600, 1, 0.01, 0.4], click: 0.6, roll: [650, 1.2] },
-  slate: { modes: [[880, 0.035, 0.7], [2050, 0.018, 0.55], [3700, 0.008, 0.35], [160, 0.03, 0.6]], noise: [3000, 1, 0.01, 0.4], click: 0.7, roll: [700, 1.3] },
   fruit: { modes: [[150, 0.025, 1], [310, 0.014, 0.4]], noise: [700, 0.8, 0.03, 0.9], click: 0.02, roll: [300, 0.8] },
 };
 
@@ -218,7 +215,7 @@ export function createAudio() {
       const now = ctx.currentTime;
       if (now - lastDrip < 0.045) return;
       lastDrip = now;
-      const soft = surface === 'paper' ? 0.5 : surface === 'wood' ? 0.7 : 1;
+      const soft = surface === 'paper' ? 0.5 : 1;
       const size = Math.min(1, r / 0.002);
       const buf = synth(0.08, (out, sr) => {
         burst(out, sr, 0, 0.004, 0.6, 'bandpass', 2500 + 2000 * (1 - size), 1.2, 0.0003);

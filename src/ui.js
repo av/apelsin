@@ -1,4 +1,3 @@
-import { SCENES } from './scenes.js';
 import { PRESET_NAMES } from './presets.js';
 
 const TOOL_HINTS = {
@@ -10,11 +9,10 @@ const TOOL_HINTS = {
 export function createUI(app, { test = false } = {}) {
   const $ = (s) => document.querySelector(s);
   const $$ = (s) => [...document.querySelectorAll(s)];
-  const scene = $('#scene'), hint = $('#hint'), hintText = $('#hint-text'), fps = $('#fps');
+  const hint = $('#hint'), hintText = $('#hint-text'), fps = $('#fps');
   const touch = matchMedia('(pointer: coarse)').matches;
   const store = (() => { try { return test ? null : window.localStorage; } catch { return null; } })();
   let hintTimer = 0, sliced = store?.getItem('apelsin.sliced') === '1';
-  scene.innerHTML = Object.entries(SCENES).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('');
 
   function showHint(text, ms = 0) {
     hintText.textContent = text;
@@ -29,7 +27,6 @@ export function createUI(app, { test = false } = {}) {
 
   $$('[data-tool]').forEach((b) => b.addEventListener('click', () => { app.setTool(b.dataset.tool); toolHint(b.dataset.tool); }));
   $$('[data-preset]').forEach((b) => b.addEventListener('click', () => app.runPreset(b.dataset.preset)));
-  scene.addEventListener('change', () => { app.setScene(scene.value); scene.blur(); });
   $('#new').addEventListener('click', () => app.newOrange());
   $('#macro').addEventListener('click', () => app.toggle('macro'));
   $('#slowmo').addEventListener('click', () => app.toggle('slowmo'));
@@ -38,7 +35,7 @@ export function createUI(app, { test = false } = {}) {
   document.addEventListener('pointerdown', () => app.audio.unlock(), { once: true, capture: true });
   for (const type of ['gesturestart', 'gesturechange', 'dblclick']) document.addEventListener(type, (e) => e.preventDefault(), { passive: false });
   document.addEventListener('touchmove', (e) => { if (!e.target.closest('#bar')) e.preventDefault(); }, { passive: false });
-  document.addEventListener('contextmenu', (e) => { if (!e.target.closest('select')) e.preventDefault(); });
+  document.addEventListener('contextmenu', (e) => e.preventDefault());
 
   function toggleSound() { app.audio.unlock(); app.audio.setMuted(!app.audio.muted); sync(); }
 
@@ -48,7 +45,6 @@ export function createUI(app, { test = false } = {}) {
   }
 
   window.addEventListener('keydown', (e) => {
-    if (e.target.closest && e.target.closest('select')) return;
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     const k = e.key.toLowerCase();
     const tools = { k: 'knife', h: 'hand', s: 'squeeze' };
@@ -72,9 +68,6 @@ export function createUI(app, { test = false } = {}) {
     $('#sound .wave').style.display = app.audio.muted ? 'none' : '';
     $('#sound .mute').style.display = app.audio.muted ? '' : 'none';
     $('#sound').setAttribute('aria-pressed', !app.audio.muted);
-    scene.value = s.scene;
-    $('#scene-label').textContent = SCENES[s.scene].label;
-    document.body.classList.toggle('dark', s.scene === 'dark');
   }
 
   return {

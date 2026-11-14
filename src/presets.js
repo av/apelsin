@@ -21,8 +21,7 @@ function axialCuts(app, origin, angles, opts = {}) {
 
 function frame(app, view) {
   const b = app.world.bounds();
-  const low = app.sceneName === 'kitchen' ? { pitch: Math.min(view.pitch, view.lowPitch ?? 0.17), distance: view.distance * 1.08 } : {};
-  app.camera.set({ ...app.scene.camera, ...view, ...low, target: [b.centre[0], view.height ?? 0.01, b.centre[2]], fov: 25 * deg });
+  app.camera.set({ ...app.scene.camera, ...view, target: [b.centre[0], view.height ?? 0.01, b.centre[2]], fov: 25 * deg });
 }
 
 function dripFromCaps(app, pieces, seconds) {
@@ -153,7 +152,6 @@ const LAYOUTS = {
 
 export function runPreset(app, name) {
   const layout = LAYOUTS[name] || LAYOUTS.whole;
-  if (name === 'reference' && app.sceneName !== 'studio') app.setScene('studio');
   app.newOrange(app.seed, { tilt: name === 'whole' });
   layout(app);
   app.preset = name;
