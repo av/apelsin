@@ -30,7 +30,7 @@ const SURFACES = {
 export function createAudio() {
   let ctx = null, master = null, dry = null, verb = null, noise = null;
   let muted = false, rate = 1;
-  let lastThud = 0, lastDrip = 0, rnd = Math.random;
+  let lastThud = -1, lastDrip = -1, rnd = Math.random;
   let roll = null, squeezeNode = null;
 
   function ensure() {
@@ -202,7 +202,7 @@ export function createAudio() {
         impactInto(out, sr, 0, surface, 1, pitch);
         if (surface !== 'fruit' && strength > 0.25) squelch(out, sr, 0.004, 0.05, 0.25 * strength, 40);
       }, 0.45);
-      play(buf, Math.pow(strength, 1.3));
+      play(buf, Math.pow(strength, 1.2) * 1.7);
     },
     rolling(speed, surface = 'paper') {
       if (!ctx || ctx.state !== 'running') return;
@@ -224,7 +224,7 @@ export function createAudio() {
         burst(out, sr, 0, 0.004, 0.6, 'bandpass', 2500 + 2000 * (1 - size), 1.2, 0.0003);
         mode(out, sr, 0.002, (1300 + rnd() * 900) / Math.sqrt(size + 0.3), 0.006 + 0.006 * size, 0.7 * soft, 0.6);
       }, 0.4);
-      play(buf, Math.min(0.5, 0.08 + size * size * 0.35 * Math.min(1, speed)) * soft);
+      play(buf, Math.min(1, 0.25 + size * size * 0.9 * Math.min(1, speed)) * soft);
     },
     squeezeStart() {
       if (!ready()) return;

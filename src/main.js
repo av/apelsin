@@ -121,7 +121,7 @@ function boot() {
     reset() { app.runPreset('whole'); camera.set({ ...app.scene.camera, fov: 25 * Math.PI / 180 }); },
     cutWith(origin, normal, pieces) {
       const n = world.cut(origin, normal, pieces);
-      if (n) { ui?.hideHint(); state.preset = null; ui?.sync(); }
+      if (n) { ui?.sliced(); state.preset = null; ui?.sync(); app.followUntil = time + 1.6; }
       return n;
     },
     download() {
@@ -137,7 +137,7 @@ function boot() {
   app.tools = tools;
   world.surfaceAt = () => app.surfaceAt();
   app.applyJuiceTint();
-  const ui = createUI(app);
+  const ui = createUI(app, { test: TEST });
   app.setScene(state.scene);
   app.newOrange(state.seed);
   if (params.has('preset')) app.runPreset(pick('preset', PRESET_NAMES, 'whole'));
@@ -149,6 +149,10 @@ function boot() {
     time += dt;
     tools.update(sim);
     world.update(sim);
+    if (app.followUntil > time && world.pieces.length && !tools.busy) {
+      const c = world.bounds().centre, g = camera.goal.target, k = Math.min(1, dt * 1.8);
+      camera.goal.target = [g[0] + (c[0] - g[0]) * k, g[1], g[2] + (c[2] - g[2]) * k];
+    }
     juice.update(sim, world.pieces, world.params, world.floorAt);
     juice.prepare(sim);
     audio.rolling(world.pieces.reduce((s, p) => s + (p.contact === 'ground' && p.body && !p.body.isSleeping() ? p.rolling || 0 : 0), 0), app.surfaceAt());

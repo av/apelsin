@@ -2,72 +2,100 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="theme-color" content="#f4f3f1">
-<title>Apelsin</title>
-<link rel="icon" href="data:,">
+<meta name="color-scheme" content="light dark">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>Apelsin: slice a photoreal orange</title>
+<meta name="description" content="A photoreal orange in your browser. Slice it with a knife, squeeze out the juice and toss the pieces around. Real-time WebGL2 with physics and synthesised sound.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Apelsin: slice a photoreal orange">
+<meta property="og:description" content="Slice, squeeze and toss a photoreal orange in your browser. WebGL2, real physics, juice and sound.">
+<meta name="twitter:card" content="summary">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3CradialGradient id='g' cx='.38' cy='.36' r='.7'%3E%3Cstop offset='0' stop-color='%23ffb84d'/%3E%3Cstop offset='.6' stop-color='%23f58a0b'/%3E%3Cstop offset='1' stop-color='%23d46a00'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='16' cy='18' r='12.5' fill='url(%23g)'/%3E%3Cpath d='M16 6.2c.6-2 2.2-3.3 4.6-3.6-.3 2.3-1.8 3.8-4.6 3.6z' fill='%235d8a2a'/%3E%3Ccircle cx='16' cy='6.6' r='1.1' fill='%236b4a1c'/%3E%3C/svg%3E">
 <style>
-  :root { --glass: rgba(255, 255, 255, 0.62); --ink: #2a2522; --muted: #6f6660; --accent: #f08a12; }
+  :root { --glass: rgba(255, 255, 255, 0.58); --glass-edge: rgba(255, 255, 255, 0.55); --ink: #2a2522; --muted: #6f6660; --line: rgba(127, 110, 100, 0.18); --on: #2a2522; --on-ink: #fff; --tip: rgba(30, 26, 24, 0.9); }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   [hidden] { display: none !important; }
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #f4f3f1; font: 13px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif; color: var(--ink); }
-  body.dark { --glass: rgba(28, 26, 25, 0.6); --ink: #f1ece6; --muted: #a59b92; background: #0b0b0c; }
-  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; background: #f4f3f1; color: var(--ink);
+    font: 13px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; touch-action: none; }
+  body.dark { --glass: rgba(28, 26, 25, 0.56); --glass-edge: rgba(255, 255, 255, 0.08); --ink: #f1ece6; --muted: #a59b92; --line: rgba(255, 255, 255, 0.1); --on: #f1ece6; --on-ink: #151312; --tip: rgba(245, 240, 234, 0.92); }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; outline: none; }
   #overlay { pointer-events: none; }
-  #bar { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(14px + env(safe-area-inset-bottom)); display: flex; gap: 6px; align-items: center;
-    padding: 6px; border-radius: 16px; background: var(--glass); backdrop-filter: blur(18px) saturate(1.4); -webkit-backdrop-filter: blur(18px) saturate(1.4);
-    box-shadow: 0 6px 30px rgba(40, 20, 0, 0.12), inset 0 0 0 1px rgba(255, 255, 255, 0.35); max-width: calc(100vw - 20px); overflow-x: auto; scrollbar-width: none; }
-  #bar::-webkit-scrollbar { display: none; }
-  .group { display: flex; gap: 2px; padding-right: 6px; border-right: 1px solid rgba(127, 110, 100, 0.2); }
-  .group:last-child { border-right: 0; padding-right: 0; }
-  button, select { appearance: none; border: 0; background: transparent; color: var(--ink); font: inherit; height: 38px; min-width: 38px; padding: 0 10px; border-radius: 11px; cursor: pointer; white-space: nowrap; }
-  select { padding-right: 22px; background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%);
-    background-position: calc(100% - 12px) 17px, calc(100% - 8px) 17px; background-size: 4px 4px; background-repeat: no-repeat; }
-  button:hover, select:hover { background: rgba(127, 110, 100, 0.12); }
-  button.on { background: var(--ink); color: #fff; }
-  body.dark button.on { color: #111; }
-  button svg { width: 18px; height: 18px; display: block; margin: auto; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
-  button kbd { font: 10px/1 ui-monospace, monospace; opacity: 0.45; margin-left: 4px; }
-  #hint { position: fixed; left: 50%; top: calc(22px + env(safe-area-inset-top)); transform: translateX(-50%); padding: 9px 16px; border-radius: 999px; background: var(--glass);
-    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); color: var(--muted); transition: opacity 0.8s; pointer-events: none; white-space: nowrap; }
-  #hint.gone { opacity: 0; }
+  #bar { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(16px + env(safe-area-inset-bottom)); display: flex; gap: 4px; align-items: center;
+    padding: 5px; border-radius: 18px; background: var(--glass); backdrop-filter: blur(20px) saturate(1.5); -webkit-backdrop-filter: blur(20px) saturate(1.5);
+    box-shadow: 0 10px 40px rgba(60, 30, 0, 0.12), 0 1px 2px rgba(60, 30, 0, 0.08), inset 0 0 0 1px var(--glass-edge); max-width: calc(100vw - 24px); transition: opacity 0.3s; }
+  .group { display: flex; gap: 2px; padding: 0 4px; border-left: 1px solid var(--line); }
+  .group:first-child { border-left: 0; padding-left: 0; }
+  .group:last-child { padding-right: 0; }
+  button, .pick { position: relative; appearance: none; border: 0; background: transparent; color: var(--ink); font: inherit; height: 38px; min-width: 38px; padding: 0 9px; border-radius: 12px;
+    cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; transition: background 0.15s, color 0.15s, transform 0.1s; }
+  button:hover, .pick:hover { background: rgba(127, 110, 100, 0.13); }
+  button:active { transform: scale(0.95); }
+  button:focus-visible, select:focus-visible + .face { outline: 2px solid #f08a12; outline-offset: 1px; }
+  button.on { background: var(--on); color: var(--on-ink); }
+  button svg, .pick svg { width: 19px; height: 19px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  .pick select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; font-size: 16px; }
+  .pick .face { pointer-events: none; display: inline-flex; align-items: center; gap: 6px; }
+  .pick .label { font-weight: 500; }
+  .pick .chev { width: 10px; height: 10px; opacity: 0.5; stroke-width: 2; }
+  [data-tip]::after { content: attr(data-tip); position: absolute; left: 50%; bottom: calc(100% + 10px); transform: translate(-50%, 4px); padding: 6px 9px; border-radius: 8px;
+    background: var(--tip); color: var(--on-ink); font-size: 12px; font-weight: 500; white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity 0.15s, transform 0.15s; z-index: 2; }
+  @media (hover: hover) { [data-tip]:hover::after { opacity: 1; transform: translate(-50%, 0); transition-delay: 0.35s; } }
+  #hint { position: fixed; left: 50%; top: calc(20px + env(safe-area-inset-top)); transform: translateX(-50%); padding: 9px 16px; border-radius: 999px; background: var(--glass);
+    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); box-shadow: inset 0 0 0 1px var(--glass-edge); color: var(--muted); transition: opacity 0.8s, transform 0.8s;
+    pointer-events: none; white-space: nowrap; display: flex; align-items: center; gap: 8px; }
+  #hint svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  #hint.gone { opacity: 0; transform: translate(-50%, -6px); }
   #fps { position: fixed; right: 10px; top: 10px; font: 11px ui-monospace, monospace; color: var(--muted); white-space: pre; pointer-events: none; }
   #nogl { position: fixed; inset: 0; display: grid; place-items: center; text-align: center; padding: 30px; color: var(--muted); font-size: 15px; }
-  @media (max-width: 720px), (pointer: coarse) {
-    #bar { left: 0; right: 0; transform: none; bottom: 0; border-radius: 18px 18px 0 0; max-width: none; padding: 8px 10px calc(8px + env(safe-area-inset-bottom)); }
-    button, select { height: 44px; min-width: 44px; }
-    button kbd { display: none; }
+  .break { display: none; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  @media (max-width: 760px), (pointer: coarse) {
+    #bar { left: 0; right: 0; transform: none; bottom: 0; border-radius: 20px 20px 0 0; max-width: none; flex-wrap: wrap; justify-content: center; row-gap: 4px;
+      padding: 7px max(8px, env(safe-area-inset-right)) calc(7px + env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left)); }
+    .group { padding: 0 3px; }
+    .break { display: block; flex-basis: 100%; height: 0; }
+    .break + .group { border-left: 0; }
+    button, .pick { height: 44px; min-width: 42px; padding: 0 4px; justify-content: center; }
+    .pick { padding: 0 6px; }
+    .pick .label { display: none; }
+    [data-tip]::after { display: none; }
+    #hint { top: calc(14px + env(safe-area-inset-top)); font-size: 13px; }
   }
 </style>
 </head>
 <body>
-<canvas id="gl"></canvas>
+<canvas id="gl" tabindex="0" aria-label="Orange"></canvas>
 <canvas id="overlay"></canvas>
-<div id="hint">Drag across the orange to slice it</div>
+<div id="hint" role="status"><svg viewBox="0 0 24 24"><path d="M4 20 18.5 5.5c1.2 1.2 1.3 3 .2 4.1L8.5 19.8"/><path d="M3 21h4"/></svg><span id="hint-text">Drag across the orange to slice it</span></div>
 <div id="fps" hidden></div>
 <nav id="bar" aria-label="Toolbar">
+  <div class="group" role="radiogroup" aria-label="Tool">
+    <button data-tool="knife" data-tip="Knife · K" aria-label="Knife"><svg viewBox="0 0 24 24"><path d="M3.5 20.5 15.2 8.8"/><path d="M15.2 8.8 19.6 4.4c1.4 1.4 1.6 3.8.2 5.2l-3.8 3.8z"/><path d="M5.6 18.4l-2.1 2.1"/></svg></button>
+    <button data-tool="hand" data-tip="Hand · H" aria-label="Hand"><svg viewBox="0 0 24 24"><path d="M8 13V6.5a1.5 1.5 0 0 1 3 0V12m0-6V4.5a1.5 1.5 0 0 1 3 0V12m0-5.5a1.5 1.5 0 0 1 3 0V13m0-3.5a1.5 1.5 0 0 1 3 0V15a6 6 0 0 1-6 6h-1.5a6 6 0 0 1-5-2.7L4 14.5a1.5 1.5 0 0 1 2.5-1.7L8 15"/></svg></button>
+    <button data-tool="squeeze" data-tip="Squeeze · S" aria-label="Squeeze"><svg viewBox="0 0 24 24"><path d="M12 3.5c2.8 4 5 6.9 5 10a5 5 0 0 1-10 0c0-3.1 2.2-6 5-10z"/><path d="M9.8 14.5a2.3 2.3 0 0 0 2.2 2.2"/></svg></button>
+  </div>
+  <div class="group" role="radiogroup" aria-label="Presets">
+    <button data-preset="whole" data-tip="Whole · 1" aria-label="Whole"><svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 5c.3-1.3 1.2-2.1 2.6-2.3"/></svg></button>
+    <button data-preset="halves" data-tip="Halves · 2" aria-label="Halves"><svg viewBox="0 0 24 24"><path d="M10.5 4a8 8 0 0 0 0 16z"/><path d="M13.5 4a8 8 0 0 1 0 16z"/><path d="M10.5 12 5 8.5M10.5 12H3M10.5 12 5 15.5M13.5 12 19 8.5M13.5 12H21M13.5 12 19 15.5"/></svg></button>
+    <button data-preset="wedges" data-tip="Wedges · 3" aria-label="Wedges"><svg viewBox="0 0 24 24"><path d="M3 9h18a9 9 0 0 1-18 0z"/><path d="M12 9v9.5M12 9 5.2 15M12 9l6.8 6"/></svg></button>
+    <button data-preset="wheels" data-tip="Wheels · 4" aria-label="Wheels"><svg viewBox="0 0 24 24"><circle cx="7.5" cy="13" r="4.8"/><circle cx="16.5" cy="13" r="4.8"/><path d="M7.5 9.5v7M4 13h7M16.5 9.5v7M13 13h7"/></svg></button>
+    <button data-preset="reference" data-tip="Reference shot · 5" aria-label="Reference"><svg viewBox="0 0 24 24"><path d="M3 18 8.5 7.5 14 18z"/><path d="M11 15.5 15.5 7l5 9.5"/><path d="M3 18h17.5"/></svg></button>
+  </div>
+  <i class="break"></i>
   <div class="group">
-    <button data-tool="knife" title="Knife (K)" aria-label="Knife"><svg viewBox="0 0 24 24"><path d="M3 21 14.5 9.5M14.5 9.5l5-5c1 1 1.5 3 0 5l-3.5 3.5z"/></svg></button>
-    <button data-tool="hand" title="Hand (H)" aria-label="Hand"><svg viewBox="0 0 24 24"><path d="M8 13V6.5a1.5 1.5 0 0 1 3 0V12m0-6V4.5a1.5 1.5 0 0 1 3 0V12m0-5.5a1.5 1.5 0 0 1 3 0V13m0-3.5a1.5 1.5 0 0 1 3 0V15a6 6 0 0 1-6 6h-1.5a6 6 0 0 1-5-2.7L4 14.5a1.5 1.5 0 0 1 2.5-1.7L8 15"/></svg></button>
-    <button data-tool="squeeze" title="Squeeze (S)" aria-label="Squeeze"><svg viewBox="0 0 24 24"><path d="M12 3c3 4.5 5.5 7.5 5.5 11a5.5 5.5 0 0 1-11 0C6.5 10.5 9 7.5 12 3z"/></svg></button>
+    <label class="pick" data-tip="Variety"><span class="face"><svg viewBox="0 0 24 24"><circle cx="12" cy="14" r="7"/><path d="M12 7c0-2 1.5-3.6 4-4-.2 2.4-1.6 3.8-4 4z"/></svg><span class="label" id="variety-label">Navel</span><svg class="chev" viewBox="0 0 10 10"><path d="M2 3.5 5 6.5 8 3.5"/></svg></span><select id="variety" aria-label="Variety"></select></label>
+    <label class="pick" data-tip="Scene"><span class="face"><svg viewBox="0 0 24 24"><path d="M3 17c4-1.3 14-1.3 18 0"/><path d="M5 16.4V5h14v11.4"/><circle cx="15" cy="9" r="1.6"/></svg><span class="label" id="scene-label">Studio</span><svg class="chev" viewBox="0 0 10 10"><path d="M2 3.5 5 6.5 8 3.5"/></svg></span><select id="scene" aria-label="Scene"></select></label>
   </div>
   <div class="group">
-    <button data-preset="whole">Whole<kbd>1</kbd></button>
-    <button data-preset="halves">Halves<kbd>2</kbd></button>
-    <button data-preset="wedges">Wedges<kbd>3</kbd></button>
-    <button data-preset="wheels">Wheels<kbd>4</kbd></button>
-    <button data-preset="reference">Reference<kbd>5</kbd></button>
-  </div>
-  <div class="group">
-    <select id="variety" aria-label="Variety"></select>
-    <select id="scene" aria-label="Scene"></select>
-  </div>
-  <div class="group">
-    <button id="new" title="New orange (N)">New<kbd>N</kbd></button>
-    <button id="macro" title="Macro depth of field (M)">Macro<kbd>M</kbd></button>
-    <button id="slowmo" title="Slow motion">Slow-mo</button>
-    <button id="sound" title="Sound" aria-label="Sound"><svg viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 5v14l-4.5-4.5H4z"/><path class="wave" d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg></button>
-    <button id="shot" title="Screenshot (P)" aria-label="Screenshot"><svg viewBox="0 0 24 24"><path d="M4 8h3l1.5-2.5h7L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></button>
+    <button id="new" data-tip="New orange · N" aria-label="New orange"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.4-5.7"/><path d="M20 4v4.5h-4.5"/></svg></button>
+    <button id="macro" data-tip="Macro focus · M" aria-label="Macro"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 4l3.6 6.3M20 12h-7.3M16 18.9l-3.6-6.3M8 19l3.6-6.3M4 12h7.3M8 5.1l3.6 6.3"/></svg></button>
+    <button id="slowmo" data-tip="Slow motion · T" aria-label="Slow motion"><svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="7.5"/><path d="M12 9v4l2.5 2"/><path d="M9.5 3h5"/></svg></button>
+    <button id="sound" data-tip="Sound · A" aria-label="Sound"><svg viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 5v14l-4.5-4.5H4z"/><path class="wave" d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/><path class="mute" d="M16 9.5l5 5M21 9.5l-5 5"/></svg></button>
+    <button id="shot" data-tip="Screenshot · P" aria-label="Screenshot"><svg viewBox="0 0 24 24"><path d="M4 8h3l1.5-2.5h7L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></button>
   </div>
 </nav>
 <div id="nogl" hidden>Apelsin needs WebGL2. Try a current version of Chrome, Safari, Firefox or Edge.</div>
