@@ -190,24 +190,25 @@ Surface materialSurface(SurfaceInput si) {
 `;
 
 const SLATE = `
-float slateHeight(vec2 p) {
-  vec2 warp = vec2(fbm3(vec3(p * 6.0, 1.3)), fbm3(vec3(p * 6.0, 7.1))) - 0.5;
+float slateHeight(vec2 p, vec2 warp) {
   float h = fbm3(vec3((p + warp * 0.03) * vec2(22.0, 30.0), 0.0));
-  float terrace = floor(h * 6.0) / 6.0 + smoothstep(0.75, 1.0, fract(h * 6.0)) / 6.0;
-  return terrace;
+  return floor(h * 6.0) / 6.0 + smoothstep(0.75, 1.0, fract(h * 6.0)) / 6.0;
 }
 Surface materialSurface(SurfaceInput si) {
   vec3 w = si.world;
   float px = si.pixel;
   Surface s = defaultSurface(normalize(si.normal));
   vec2 p = vec2(w.x * 0.94 + w.z * 0.34, w.z * 0.94 - w.x * 0.34);
-  float h = slateHeight(p);
-  float e = 0.0015;
-  vec2 g = vec2(slateHeight(p + vec2(e, 0.0)) - h, slateHeight(p + vec2(0.0, e)) - h) / e;
+  vec2 warp = vec2(vnoise(vec3(p * 6.0, 1.3)), vnoise(vec3(p * 6.0, 7.1))) - 0.5;
+  float h = slateHeight(p, warp);
+  vec2 dpx = dFdx(p), dpy = dFdy(p);
+  float dhx = dFdx(h), dhy = dFdy(h);
+  float det = dpx.x * dpy.y - dpx.y * dpy.x;
+  vec2 g = abs(det) > 1e-14 ? clamp(vec2(dhx * dpy.y - dhy * dpx.y, dpx.x * dhy - dpy.x * dhx) / det, -60.0, 60.0) : vec2(0.0);
   float grainK = 1.0 - smoothstep(0.00006, 0.0003, px);
   float grain = vnoise(w * 2600.0);
   float grain2 = vnoise(w * 2600.0 + 9.0);
-  float mottle = fbm3(w * 9.0);
+  float mottle = vnoise(w * 9.0);
   float flecks = smoothstep(0.86, 0.94, vnoise(w * 1100.0 + 3.0)) * grainK;
   vec3 col = vec3(0.028, 0.03, 0.033) * (0.75 + 0.5 * h) * (0.85 + 0.3 * mottle) * (0.9 + 0.2 * mix(0.5, grain, grainK));
   col += vec3(0.018, 0.019, 0.02) * flecks;

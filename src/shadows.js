@@ -38,8 +38,7 @@ uniform float uKeySamples;
 in vec2 vUv;
 layout(location = 0) out vec4 outAO;
 layout(location = 1) out vec4 outKey;
-const int DIRS = 16;
-const int STEPS = 10;
+uniform vec4 uQuality;
 vec2 heightAt(vec2 uv) {
   if (any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) return vec2(-1.0, 1.0);
   vec2 h = texture(uHeight, uv).rg;
@@ -51,11 +50,14 @@ void main() {
   float jitter = hash(vUv * 917.0);
   float vis = 0.0;
   vec3 bent = vec3(0.0);
-  for (int i = 0; i < DIRS; i++) {
+  int DIRS = int(uQuality.x), STEPS = int(uQuality.y), MARCH = int(uQuality.z);
+  for (int i = 0; i < 16; i++) {
+    if (i >= DIRS) break;
     float a = (float(i) + jitter * 0.5) * 6.2831853 / float(DIRS);
     vec2 d = vec2(cos(a), sin(a));
     float sinTop = 0.0, sinBot = 1.0;
-    for (int k = 0; k < STEPS; k++) {
+    for (int k = 0; k < 12; k++) {
+      if (k >= STEPS) break;
       float t = (float(k) + 0.5 + 0.5 * jitter) / float(STEPS);
       float r = reach * t * t + 0.0003;
       vec2 h = heightAt(vUv + d * r / worldPerUv);
@@ -89,8 +91,9 @@ void main() {
     float maxR = min(uParams.w, maxHeight / slope);
     float path = 0.0;
     float prevR = 0.0;
-    for (int k = 0; k < 14; k++) {
-      float t = (float(k) + 0.5 + 0.5 * jitter) / 14.0;
+    for (int k = 0; k < 16; k++) {
+      if (k >= MARCH) break;
+      float t = (float(k) + 0.5 + 0.5 * jitter) / float(MARCH);
       float r = maxR * t * t + 0.0002;
       float rayH = r * slope;
       vec2 h = heightAt(vUv + hd * r / worldPerUv);
@@ -241,7 +244,7 @@ export function createShadows(gl, initialSize, initialGround = 384) {
     const k = state.key;
     use(groundProg, {
       uHeight: height.colors[0], uParams: [2 * state.groundHalf, state.groundReach, state.groundTop, state.groundShadowReach],
-      uKeyDir: [...k.dir, k.tanX], uKeyUp: [...(k.up || [0, 1, 0]), k.tanY], uLeakTint: [...state.leak.tint, 0], uMfp: [...state.leak.mfp, state.leak.strength], uKeySamples: keySamples,
+      uKeyDir: [...k.dir, k.tanX], uKeyUp: [...(k.up || [0, 1, 0]), k.tanY], uLeakTint: [...state.leak.tint, 0], uMfp: [...state.leak.mfp, state.leak.strength], uKeySamples: keySamples, uQuality: keySamples >= 5 ? [16, 10, 14, 0] : keySamples >= 4 ? [12, 9, 12, 0] : [10, 7, 9, 0],
     });
     fullscreen(gl);
     const texel = 1 / groundSize;
