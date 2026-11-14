@@ -502,7 +502,7 @@ Surface orangeInterior(SurfaceInput si) {
     vec3 flavBody = min(oRind.rgb * vec3(1.12, 1.4, 1.6), vec3(1.0));
     vec3 flavCol = mix(flavBody, oRind.rgb * vec3(1.15, 1.05, 1.0), outerLine);
     flavCol *= 0.95 + 0.1 * vnoise(p * 6000.0);
-    flavCol = mix(flavCol, vec3(0.95, 0.56, 0.08), toothZone * 0.55);
+    flavCol = mix(flavCol, vec3(0.95, 0.56, 0.08), toothZone * 0.35);
     vec3 glandCol = mix(vec3(0.973, 0.68, 0.04), vec3(0.9, 0.5, 0.03), smoothstep(0.6, 1.0, ge));
     flavCol = mix(flavCol, glandCol, glandK * (0.35 + 0.35 * gl.id.z));
     float yZone = 1.0 - smoothstep(boundary, boundary + 0.0006 + 0.0003 * gl.id.y, depth);
