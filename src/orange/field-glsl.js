@@ -244,7 +244,15 @@ Surface cutSurface(SurfaceInput si, vec4 plane, vec3 Nrest) {
   vec3 sssColor = oFlesh.rgb * 0.5, trans = oFlesh.rgb * vec3(0.66, 0.25, 0.02);
   float ph = planeHash(plane);
   float w = clamp(A.depthP / A.pulpD, 0.0, 1.0);
-  if (A.depthP < 0.0) {
+  if (A.depthO < -0.00004) {
+    float rr = length(p.xz);
+    float ring = smoothstep(0.00025, 0.0005, rr) * (1.0 - smoothstep(0.0007, 0.001, rr));
+    vec3 stem = mix(vec3(0.2, 0.19, 0.025), vec3(0.4, 0.38, 0.13), ring * (0.7 + 0.3 * vnoise(p * 9000.0)));
+    stem = mix(stem, vec3(0.1, 0.1, 0.015), smoothstep(-0.0003, -0.0008, A.depthO) * (1.0 - ring) * 0.4);
+    albedo = stem;
+    rough = 0.55; clear = 0.15; ccRough = 0.1; profile = 2.0; width = 0.3;
+    sssColor = stem * 0.2; trans = vec3(0.0);
+  } else if (A.depthP < 0.0) {
     vec4 g = glandAt(A.dir);
     float has = step(1e-6, g.w), grad = max(g.w, 1e-5);
     vec3 gdir = g.xyz / max(length(g.xyz), 1e-6);
