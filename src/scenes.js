@@ -30,16 +30,19 @@ const light = (dir, up, size, color, intensity, soft = 0.12, shape = {}) => ({ d
 export const STUDIO = {
   env: {
     top: [0.4, 0.4, 0.41], horizon: [0.5, 0.5, 0.5], bottom: [0.85, 0.84, 0.83],
-    hdri: { url: new URL('../assets/hdri/monochrome_studio_03_1k.hdr', import.meta.url).href, scale: 0.75, yaw: 0, clamp: 3 },
+    hdri: { url: new URL('../assets/hdri/monochrome_studio_03_1k.hdr', import.meta.url).href, scale: 0.6, yaw: 0, clamp: 3 },
     lights: [
       light([0.235, 0.883, -0.407], [0, 1, 0], [0.38, 0.3], [1, 0.99, 0.97], 10.2, 0.2, { core: [4, 0.35] }),
-      light([-0.45, 0.45, 0.75], [0, 1, 0], [0.45, 0.35], [1, 0.995, 0.99], 2.0, 0.5, { core: [2, 0.4] }),
+      light([-0.45, 0.45, 0.75], [0, 1, 0], [0.45, 0.35], [1, 0.995, 0.99], 1.0, 0.5, { core: [2, 0.4] }),
       light([-0.75, 0.35, -0.55], [0, 1, 0], [0.4, 0.12], [1, 1, 1], 1.2, 0.25),
+      light([0.3, 0.75, 0.6], [0, 1, 0], [0.3, 0.22], [1, 0.995, 0.98], 9, 0.5),
+      light([0.12, 0.62, 0.78], [0, 1, 0], [0.05, 0.035], [1, 1, 1], 120, 0.3),
+      light([0.95, 0.2, 0.25], [0, 1, 0], [0.04, 0.35], [1, 1, 1], 5, 0.3),
     ],
   },
   envIntensity: 1, keyIntensity: 1, exposure: 1.3, background: [2, 1, 0, 0],
   occluder: { bounce: 0.6, leak: 0.6, mfp: [0.009, 0.0032, 0.0012] },
-  grade: { white: 1.3, contrast: 1.0, saturation: 1.06, vignette: 0, grain: 0.004, bloom: 0.04, bloomThreshold: 2.4 },
+  grade: { white: 1.3, contrast: 1.0, saturation: 1.06, vignette: 0, grain: 0.004, bloom: 0.04, bloomThreshold: 2.4, channel: 0.65, auto: { target: 1.4, min: 0.5, max: 1, tau: 0.6 } },
   backdrop: [{ material: 'cove', data: coveMesh, color: [0.9, 0.9, 0.9, 1] }],
   colliders: [{ size: [10, 1, 10], centre: [0, -0.5, 0] }, { size: [10, 4, 1], centre: [0, 2, -1.65] }],
   camera: { target: [0, 0.03, 0], yaw: 0.35, pitch: 0.3, distance: 0.42 },
