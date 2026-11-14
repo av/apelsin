@@ -2,7 +2,7 @@ import { v3 } from '../math.js';
 import { STRIDE } from './mesh.js';
 
 let nextCap = 1;
-const SPACING = 0.0011;
+const SPACING = 0.0018;
 
 class Sink {
   constructor(cap) { this.data = new Float32Array(cap * STRIDE); this.n = 0; }

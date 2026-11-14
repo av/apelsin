@@ -4,7 +4,7 @@ export const VARIETIES = {
   navel: {
     label: 'Navel', radius: 0.04, polar: 1.03, lump: 0.012, shoulder: 0.018, flavedo: 0.0013, pith: 0.0034, core: 0.0055,
     segments: [10, 11], seeds: [0, 0], navel: 0.0016, vesicle: [0.0015, 0.0115],
-    rind: [0.855, 0.254, 0.003], rindStem: [0.591, 0.06, 0.0], stemMix: 0.8, blush: [0.716, 0.076, 0.002, 0.25], flesh: [0.92, 0.57, 0.012], flesh2: [0.95, 0.3, 0.002, 0], pithColor: [0.95, 0.91, 0.68],
+    rind: [0.855, 0.254, 0.003], rindStem: [0.591, 0.06, 0.0], stemMix: 0.8, blush: [0.716, 0.076, 0.002, 0.25], flesh: [0.92, 0.57, 0.012], flesh2: [0.95, 0.3, 0.002, 0], pithColor: [0.95, 0.935, 0.66],
     fleshDeep: [0.9, 0.46, 0.006], fleshWall: [0.97, 0.78, 0.1], corePale: 0.3, wax: 0.75, pebble: 0.00012, navelOpen: 0.1, hollow: 0,
     gland: 680, glandDepth: 1, mottle: 0.1,
   },
