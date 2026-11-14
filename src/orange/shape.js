@@ -160,7 +160,7 @@ export function createShape(seed = 1, opts = {}) {
   const bumps = [];
   for (let k = 0; k < 14; k++) {
     const z = rnd() * 2 - 1, t = rnd() * Math.PI * 2, q = Math.sqrt(1 - z * z), w = 0.16 + rnd() * 0.2;
-    bumps.push([q * Math.cos(t), z, q * Math.sin(t), 2 / (w * w), (rnd() * 2 - 1) * (0.002 + rnd() * 0.004)]);
+    bumps.push([q * Math.cos(t), z, q * Math.sin(t), 2 / (w * w), (rnd() * 2 - 1) * (0.0015 + rnd() * 0.003)]);
   }
   const sepals = rnd() < 0.85 ? 5 : rnd() < 0.5 ? 4 : 6;
   const calyxR = o.calyx * (0.85 + 0.35 * rnd()), phase0 = rnd() * Math.PI * 2;

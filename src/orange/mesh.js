@@ -27,7 +27,7 @@ const FACES = [
   [[0, 0, -1], [-1, 0, 0], [0, 1, 0]],
 ];
 
-const POLE_K = 0.35;
+const POLE_K = 0.45;
 
 function warp(u, v, pole) {
   if (!pole) return [u, v];
@@ -46,7 +46,7 @@ export function orangeMesh(p, n = 64) {
   const grid = new Float32Array((n + 1) * (n + 1) * 6);
   const M = n + 3, apron = new Float32Array(M * M * 3);
   for (const [f, u, v] of FACES) {
-    const pole = Math.abs(f[1]) > 0.5;
+    const pole = f[1] > 0.5;
     for (let j = 0; j < M; j++) for (let i = 0; i < M; i++) {
       const [gu, gv] = warp(((i - 1) / n) * 2 - 1, ((j - 1) / n) * 2 - 1, pole);
       const a = Math.tan(gu * Math.PI / 4), b = Math.tan(gv * Math.PI / 4);
