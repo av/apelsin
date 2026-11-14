@@ -396,6 +396,113 @@ test('a cut face shows the anatomy across: rind, white pith, flesh, white core, 
   await page.close();
 });
 
+async function capture(page) {
+  const url = await page.evaluate(() => window.apelsin.screenshot());
+  return page.evaluate(async (src) => {
+    const img = new Image();
+    img.src = src;
+    await img.decode();
+    const c = document.createElement('canvas');
+    c.width = img.width; c.height = img.height;
+    const ctx = c.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+    const d = ctx.getImageData(0, 0, c.width, c.height).data;
+    window.__shot = { w: c.width, h: c.height, d };
+    return { w: c.width, h: c.height };
+  }, url);
+}
+
+async function faceUpHalf(page) {
+  return page.evaluate(async () => {
+    const { quat } = await import('./src/math.js');
+    const { restToWorld } = await import('./src/orange/piece.js');
+    const { world, juice } = window.apelsin.internals;
+    world.remove(world.pieces[1]);
+    const piece = world.pieces[0];
+    world.place(piece, [0, 0, 0], quat.fromTo(piece.caps[0].normal, [0, 1, 0]), { sleep: true });
+    juice.clear();
+    window.apelsin.step(2);
+    return { centre: restToWorld(piece, [0, piece.caps[0].centroid[1], 0]), side: restToWorld(piece, [0.012, piece.caps[0].centroid[1], 0.008]) };
+  });
+}
+
+test('a cut face is a field of separate wet sac highlights, not a flat painted cap', async () => {
+  const page = await open('seed=5&preset=halves&debug', { width: 900, height: 900 });
+  const { side } = await faceUpHalf(page);
+  await page.evaluate((c) => window.apelsin.camera({ target: c, yaw: 0.3, pitch: 1.1, distance: 0.14, fov: (20 * Math.PI) / 180 }), side);
+  await page.evaluate(() => window.apelsin.step(20));
+  await capture(page);
+  const { peaks, flesh } = await page.evaluate(() => {
+    const { w, h, d } = window.__shot;
+    const L = new Float32Array(w * h);
+    let fleshN = 0;
+    for (let i = 0; i < w * h; i++) {
+      L[i] = 0.3 * d[i * 4] + 0.59 * d[i * 4 + 1] + 0.11 * d[i * 4 + 2];
+      if (d[i * 4] - d[i * 4 + 2] > 70 && d[i * 4] > 150) fleshN++;
+    }
+    let n = 0;
+    const R = 3;
+    for (let y = R; y < h - R; y++) for (let x = R; x < w - R; x++) {
+      const k = y * w + x, v = L[k];
+      if (d[k * 4] - d[k * 4 + 2] <= 50) continue;
+      let max = true, sum = 0;
+      for (let dy = -R; dy <= R && max; dy++) for (let dx = -R; dx <= R; dx++) { const u = L[k + dy * w + dx]; sum += u; if (u > v) { max = false; break; } }
+      if (max && v > sum / ((2 * R + 1) ** 2) + 8) n++;
+    }
+    return { peaks: n, flesh: fleshN / (w * h) };
+  });
+  assert.ok(flesh > 0.7, `the macro is filled with flesh ${flesh}`);
+  assert.ok(peaks > 400, `distinct sac highlights on the face ${peaks}`);
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
+
+test('the cut face renders solid from every viewing angle, with no holes', async () => {
+  const page = await open('seed=5&preset=halves&debug', { width: 900, height: 900 });
+  const { side } = await faceUpHalf(page);
+  for (const [yaw, pitch] of [[0, 0.12], [1.3, 0.3], [2.6, 0.7], [3.9, 1.2], [5.2, 1.5]]) {
+    await page.evaluate(([c, y, p]) => window.apelsin.camera({ target: c, yaw: y, pitch: p, distance: 0.2, fov: (25 * Math.PI) / 180 }), [side, yaw, pitch]);
+    await page.evaluate(() => window.apelsin.step(8));
+    const [px, py] = await page.evaluate((c) => window.apelsin.project(c), side);
+    await capture(page);
+    const v = await page.evaluate(([px, py]) => {
+      const { w, h, d } = window.__shot;
+      const sx = Math.round((px * w) / innerWidth), sy = Math.round((py * h) / innerHeight);
+      let white = 0, orange = 0, n = 0;
+      for (let y = sy - 12; y <= sy + 12; y += 2) for (let x = sx - 12; x <= sx + 12; x += 2) {
+        const k = (y * w + x) * 4;
+        n++;
+        if (d[k] > 245 && d[k + 1] > 245 && d[k + 2] > 240) white++;
+        if (d[k] > 150 && d[k] - d[k + 2] > 60) orange++;
+      }
+      return { white: white / n, orange: orange / n };
+    }, [px, py]);
+    assert.ok(v.orange > 0.45, `yaw ${yaw} pitch ${pitch}: the face shows flesh ${JSON.stringify(v)}`);
+    if (pitch >= 0.3) assert.ok(v.white < 0.01, `yaw ${yaw} pitch ${pitch}: no background shows through the face ${JSON.stringify(v)}`);
+  }
+  assert.deepEqual(page.errors, []);
+  await page.close();
+});
+
+test('the reference cut face is saturated orange, not pastel (median near #FCC03B)', async () => {
+  const page = await open('preset=reference&seed=4', { width: 1300, height: 860 });
+  await page.evaluate(() => window.apelsin.step(40));
+  await capture(page);
+  const med = await page.evaluate(() => {
+    const { w, h, d } = window.__shot;
+    const r = [], g = [], b = [];
+    for (let y = Math.floor(h * 0.25); y < h * 0.65; y += 2) for (let x = Math.floor(w * 0.5); x < w * 0.9; x += 2) {
+      const k = (y * w + x) * 4;
+      if (d[k] > 200 && d[k] - d[k + 2] > 100) { r.push(d[k]); g.push(d[k + 1]); b.push(d[k + 2]); }
+    }
+    const m = (a) => a.sort((p, q) => p - q)[a.length >> 1];
+    return { n: r.length, r: m(r), g: m(g), b: m(b) };
+  });
+  assert.ok(med.n > 2000, `the face is in frame ${JSON.stringify(med)}`);
+  assert.ok(med.r >= 235 && med.g >= 165 && med.g <= 215 && med.b <= 90, `flesh median ${JSON.stringify(med)}`);
+  await page.close();
+});
+
 test('the stem end carries an olive calyx button with a stem stub', async () => {
   const page = await open('seed=6&debug', { width: 800, height: 800 });
   await page.evaluate(async () => {
