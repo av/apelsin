@@ -28,9 +28,14 @@ function massPoints(piece) {
   const { data, count } = piece.geometry, S = 7;
   const stride = Math.max(1, Math.floor(count / 900));
   const out = new Float32Array(Math.ceil(count / stride) * 3);
+  const seen = new Set();
   let n = 0;
   for (let i = 0; i < count; i += stride) {
-    out[n++] = data[i * S] - piece.com[0]; out[n++] = data[i * S + 1] - piece.com[1]; out[n++] = data[i * S + 2] - piece.com[2];
+    const x = data[i * S] - piece.com[0], y = data[i * S + 1] - piece.com[1], z = data[i * S + 2] - piece.com[2];
+    const key = `${Math.round(x * 1e5)},${Math.round(y * 1e5)},${Math.round(z * 1e5)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out[n++] = x; out[n++] = y; out[n++] = z;
   }
   return out.subarray(0, n);
 }
@@ -150,8 +155,10 @@ export async function createPhysics(rapierUrl = '../vendor/rapier/rapier.mjs') {
       .setLinvel(...linvel).setAngvel({ x: angvel[0], y: angvel[1], z: angvel[2] })
       .setCcdEnabled(true).setLinearDamping(0.08).setAngularDamping(0.15);
     const body = world.createRigidBody(desc);
-    const mass = R.ColliderDesc.convexHull(massPoints(piece)) || R.ColliderDesc.ball(Math.max(0.004, Math.cbrt(piece.volume * 0.24)));
-    world.createCollider(mass.setDensity(950).setCollisionGroups(0), body);
+    const hull = R.ColliderDesc.convexHull(massPoints(piece));
+    let massCollider = null;
+    try { if (hull) massCollider = world.createCollider(hull.setDensity(950).setCollisionGroups(0), body); } catch { massCollider = null; }
+    if (!massCollider) world.createCollider(R.ColliderDesc.ball(Math.max(0.004, Math.cbrt(piece.volume * 0.24))).setDensity(950).setCollisionGroups(0), body);
     const whole = piece.caps.length === 0;
     const friction = whole ? 0.75 : 0.9, restitution = whole ? 0.22 : 0.08;
     const balls = contactBalls(piece);
