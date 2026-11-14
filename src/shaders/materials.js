@@ -51,6 +51,7 @@ vec2 wetBicubic(vec2 uv) {
 void applyWetness(inout Surface s, SurfaceInput si) {
   vec2 uv = wetUv(si.world);
   if (uWetParams.y < 0.5 || any(lessThan(uv, vec2(0.002))) || any(greaterThan(uv, vec2(0.998)))) return;
+  if (texture(uWetness, uv).g < 0.05) return;
   vec2 f = wetBicubic(uv);
   if (f.g < 0.12) return;
   float grain = vnoise(vec3(si.world.xz * 3000.0, 3.1)) - 0.5;
