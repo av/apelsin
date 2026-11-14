@@ -94,7 +94,9 @@ Pits pitsAt(vec3 d, float R, vec4 gs[25], int n) {
 }
 float undulation(vec3 p) {
   vec3 q = p * 1000.0 + uSeed.xyz * 40.0;
-  return uUndul.x * (vnoise(q / 5.5) - 0.5) + uUndul.y * (vnoise(q / 2.6 + 7.1) - 0.5) + uUndul.z * (vnoise(q / 1.3 + 3.7) - 0.5);
+  float h = uUndul.x * (vnoise(q / 5.5) - 0.5) + uUndul.y * (vnoise(q / 2.6 + 7.1) - 0.5) + uUndul.z * (vnoise(q / 1.3 + 3.7) - 0.5);
+  h += uUndul.z * 0.4 * (vnoise(q / 0.62 + 1.9) - 0.5) + 0.0000022 * (vnoise(q / 0.16 + 5.3) - 0.5) + 0.0000012 * (vnoise(q / 0.08 + 8.1) - 0.5);
+  return h;
 }
 void triangleGrid(vec2 st, out vec3 w, out vec2 v1, out vec2 v2, out vec2 v3) {
   st *= 3.4641016;
@@ -256,11 +258,12 @@ void main() {
   vec3 gid = P.id;
   float speck = (gid.x - 0.5) * 0.08 + (gid.y > 0.95 ? 0.08 : 0.0);
   col *= 1.0 + speck * P.k;
-  col = mix(col, col * vec3(0.6, 0.48, 0.42), P.k * P.k * 0.6);
-  col *= 1.0 + tone * 0.08;
+  col = mix(col, col * vec3(0.72, 0.58, 0.48), pow(P.k, 3.0) * 0.45 * step(0.6, gid.z));
+  col *= 1.0 + tone * 0.2 + 0.12 * (vnoise(q / 0.14 + 4.0) - 0.5) + 0.1 * (vnoise(q / 0.45 + 9.0) - 0.5);
   float dead = step(0.9992, gid.z) * smoothstep(0.6, 0.9, P.k);
   col = mix(col, col * vec3(0.45, 0.3, 0.2), dead);
-  float rough = 0.36 + lm.w * 0.06 + 0.34 * P.k * P.k + 0.04 * (m2 - 0.5);
+  float patchy = vnoise(q / 0.55 + 2.0) * 0.6 + vnoise(q / 0.22 + 6.0) * 0.4;
+  float rough = 0.34 + lm.w * 0.06 + 0.25 * P.k * P.k + 0.04 * (m2 - 0.5) + 0.13 * smoothstep(0.4, 0.65, patchy);
   for (int i = 0; i < 3; i++) {
     vec4 sc = uScar[i];
     if (sc.w <= 0.0) continue;
@@ -409,8 +412,8 @@ function rindUniforms(shape, p) {
     uBase: [rind[0] * tint, rind[1] * (1.02 + rnd() * 0.26), rind[2]],
     uStemCol: [...(p.rindStem || [0.591, 0.06, 0]), 0.35 + rnd() * 0.35],
     uPal: [0.12 + rnd() * 0.25, 0.08 + rnd() * 0.22, 0.06 + rnd() * 0.08, rnd() < 0.3 ? rnd() * 0.25 : 0],
-    uUndul: [0.00009 + rnd() * 0.00008, 0.00005 + rnd() * 0.00004, 0.000015 + rnd() * 0.000015, 0.1 + rnd() * 0.04],
-    uCushion: [0.00032 + rnd() * 0.00012, 0.00007 + rnd() * 0.00003, 1, 0],
+    uUndul: [0.00005 + rnd() * 0.00004, 0.00006 + rnd() * 0.00003, 0.00004 + rnd() * 0.00002, 0.09 + rnd() * 0.04],
+    uCushion: [0.0001 + rnd() * 0.00004, 0.00003 + rnd() * 0.00002, 1, 0],
     uCalyx: [cx.radius, cx.inner, cx.stemR, cx.stemH],
     uStem: [cx.stemTilt[0] * cx.stemH * 0.6, cx.stemTilt[1] * cx.stemH * 0.6, cx.brown, 4 + Math.floor(rnd() * 5)],
     uNavel: [shape.navelOpen > 0.02 ? shape.navelOpen : 0, shape.navelDepth || 0, 7 + Math.floor(rnd() * 4), 0],

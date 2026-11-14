@@ -14,6 +14,23 @@ void rindFootprint(SurfaceInput si, vec3 Nm, float rl, out vec3 dx, out vec3 dy)
   dx = ta * px / sqrt(NoV);
   dy = tb * px;
 }
+vec4 rindNoiseD(vec3 x) {
+  vec3 i = floor(x), f = fract(x);
+  vec3 u = f * f * (3.0 - 2.0 * f), du = 6.0 * f * (1.0 - f);
+  float a = hash13(i), b = hash13(i + vec3(1, 0, 0)), c = hash13(i + vec3(0, 1, 0)), d = hash13(i + vec3(1, 1, 0));
+  float e = hash13(i + vec3(0, 0, 1)), g = hash13(i + vec3(1, 0, 1)), h = hash13(i + vec3(0, 1, 1)), k = hash13(i + vec3(1, 1, 1));
+  float k1 = b - a, k2 = c - a, k3 = e - a, k4 = a - b - c + d, k5 = a - c - e + h, k6 = a - b - e + g, k7 = -a + b + c - d + e - g - h + k;
+  return vec4(a + k1 * u.x + k2 * u.y + k3 * u.z + k4 * u.x * u.y + k5 * u.y * u.z + k6 * u.z * u.x + k7 * u.x * u.y * u.z,
+    du * vec3(k1 + k4 * u.y + k6 * u.z + k7 * u.y * u.z, k2 + k5 * u.z + k4 * u.x + k7 * u.z * u.x, k3 + k6 * u.x + k5 * u.y + k7 * u.x * u.y));
+}
+vec3 rindGrain(vec3 p, float px) {
+  vec3 g = vec3(0);
+  float f1 = 1.0 - smoothstep(0.000025, 0.00004, px);
+  if (f1 > 0.0) g += rindNoiseD(p * 10000.0).yzw * 10000.0 * 0.000004 * f1;
+  float f2 = 1.0 - smoothstep(0.000011, 0.000018, px);
+  if (f2 > 0.0) g += rindNoiseD(p * 22000.0 + 7.3).yzw * 22000.0 * 0.0000016 * f2;
+  return g;
+}
 Surface rindSurface(SurfaceInput si) {
   vec3 p = si.rest;
   float rl = max(length(p), 1e-5);
@@ -24,6 +41,8 @@ Surface rindSurface(SurfaceInput si) {
   vec4 n = textureGrad(uRindN, d, dx, dy);
   vec4 c = textureGrad(uRindC, d, dx, dy);
   vec3 g = (n.xyz * 2.0 - 1.0) * RIND_GMAX;
+  vec3 gr = rindGrain(p, si.pixel);
+  g += gr - d * dot(gr, d);
   float var = max(n.w * RIND_GMAX * RIND_GMAX - dot(g, g), 0.0);
   vec3 albedo = c.rgb;
   float rough = c.a;

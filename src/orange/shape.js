@@ -247,11 +247,13 @@ export function createShape(seed = 1, opts = {}) {
     const [tx, tz] = calyx.stemTilt, [kx, kz] = calyx.stemCut;
     const ox = tx * calyx.stemH * 0.6, oz = tz * calyx.stemH * 0.6;
     const rs = Math.hypot(X - ox, Z - oz), ps = Math.atan2(Z - oz, X - ox);
-    const sr = calyx.stemR * (1 + 0.07 * Math.sin(ps * 2 + calyx.brown * 6) + 0.04 * Math.sin(ps * 5 + 1.3) + 0.02 * Math.sin(ps * 11 + 2.1));
-    const rTop = sr * 0.7, rBase = sr * 2.1;
-    const fall = 1 - smooth(rTop, rBase, rs);
-    const top = calyx.stemH * 0.8 + 0.0005 + (kx * (X - ox) + kz * (Z - oz)) * 0.35 - 0.00012 * Math.exp(-((rs / (sr * 0.4)) ** 2));
-    const stub = top * Math.pow(fall, 2.2);
+    const b = calyx.brown * 6;
+    const sr = calyx.stemR * (1 + 0.12 * Math.sin(ps * 2 + b) + 0.08 * Math.sin(ps * 3 + 1.7 + b) + 0.05 * Math.sin(ps * 5 + 1.3) + 0.025 * Math.sin(ps * 13 + 2.1));
+    const rTop = sr * (0.55 + 0.1 * Math.sin(ps * 4 + b)), rBase = sr * (1.8 + 0.3 * Math.sin(ps * 3 + 1 + b));
+    const fall = 1 - smooth(rTop * 0.5, rBase, rs);
+    const top = calyx.stemH * 0.75 + 0.0005 + (kx * (X - ox) + kz * (Z - oz)) * 0.3 - 0.00015 * Math.exp(-((rs / (sr * 0.35)) ** 2));
+    const ridge = 1 + 0.07 * Math.cos(ps * 11 + 2 * Math.sin(ps * 3 + b)) * smooth(rTop * 0.4, rBase * 0.8, rs);
+    const stub = top * Math.pow(fall, 1.8) * ridge;
     return Math.max(cal, stub);
   }
   const shape = {
