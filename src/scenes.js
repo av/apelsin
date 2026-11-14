@@ -97,18 +97,18 @@ export const SCENES = {
   kitchen: {
     label: 'Kitchen',
     env: {
-      top: [0.16, 0.15, 0.14], horizon: [0.2, 0.17, 0.14], bottom: [0.09, 0.07, 0.05],
+      top: [0.13, 0.12, 0.11], horizon: [0.17, 0.14, 0.11], bottom: [0.08, 0.06, 0.04],
       lights: [
-        light(windowDir, [0, 1, 0], windowSize, [1, 0.9, 0.76], 4.2, 0.06),
-        light([0.55, 0.75, 0.45], [0, 1, 0], [0.9, 0.7], [0.78, 0.86, 1], 0.6, 0.6),
-        light([0.35, 0.3, 1], [0, 1, 0], [0.9, 0.55], [1, 0.93, 0.86], 0.55, 0.6),
+        light(windowDir, [0, 1, 0], windowSize, [1, 0.9, 0.76], 5.0, 0.06),
+        light([0.55, 0.75, 0.45], [0, 1, 0], [0.9, 0.7], [0.9, 0.93, 1], 0.5, 0.6),
+        light([0.35, 0.3, 1], [0, 1, 0], [0.9, 0.55], [1, 0.92, 0.82], 0.5, 0.6),
         light([-0.9, 0.4, 0.3], [0, 1, 0], [0.5, 0.4], [0.9, 0.85, 0.8], 0.12, 0.5),
       ],
     },
     envIntensity: 1, keyIntensity: 1, exposure: 1.0, background: [3, 1, 1, 0], groundReach: 0.07,
     pool: [0.5, 0.45],
     occluder: { bounce: 0.35, leak: 0.9, mfp: [0.009, 0.0032, 0.0012], bounceWhite: 0.15 },
-    grade: { white: 1.7, contrast: 1.12, saturation: 1.06, balance: [1.0, 0.99, 0.97], vignette: 0.22, grain: 0.007, bloom: 0.06, bloomThreshold: 1.6, toe: 0.002 },
+    grade: { white: 1.7, contrast: 1.18, saturation: 1.08, balance: [1.0, 0.98, 0.95], vignette: 0.25, grain: 0.007, bloom: 0.06, bloomThreshold: 1.6, toe: 0.003 },
     dof: 8,
     window: WINDOW,
     backdrop: [
