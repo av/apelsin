@@ -35,6 +35,7 @@ export function createWorld(gl, { juice, audio }) {
 
   function clear() {
     for (const p of w.pieces.slice()) remove(p);
+    if (w.physics) w.physics.reset();
     juice.clear();
   }
 

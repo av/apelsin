@@ -122,10 +122,15 @@ export function contactBalls(piece) {
 export async function createPhysics(rapierUrl = '../vendor/rapier/rapier.mjs') {
   const R = (await import(rapierUrl)).default;
   await R.init();
-  const world = new R.World({ x: 0, y: -9.81, z: 0 });
-  world.timestep = STEP;
-  world.numSolverIterations = 6;
-  world.lengthUnit = 0.05;
+  const makeWorld = () => {
+    const w = new R.World({ x: 0, y: -9.81, z: 0 });
+    w.timestep = STEP;
+    w.numSolverIterations = 6;
+    w.lengthUnit = 0.05;
+    return w;
+  };
+  let world = makeWorld();
+  let colliderList = [];
   const events = new R.EventQueue(true);
   const statics = [];
   const staticHandles = new Set();
@@ -136,6 +141,7 @@ export async function createPhysics(rapierUrl = '../vendor/rapier/rapier.mjs') {
   const touch = new Map();
 
   function setColliders(list) {
+    colliderList = list;
     for (const b of statics) world.removeRigidBody(b);
     statics.length = 0;
     staticHandles.clear();
@@ -332,8 +338,21 @@ export async function createPhysics(rapierUrl = '../vendor/rapier/rapier.mjs') {
     sync(pieces);
   }
 
+  function reset() {
+    if (owner.size) return false;
+    world.free();
+    world = makeWorld();
+    statics.length = 0;
+    touch.clear();
+    accumulator = 0;
+    clock = 0;
+    grab = null;
+    setColliders(colliderList);
+    return true;
+  }
+
   return {
-    R, world, setColliders, addPiece, removePiece, setPose, velocityAt, step, settle,
+    R, get world() { return world; }, setColliders, reset, addPiece, removePiece, setPose, velocityAt, step, settle,
     on(name, f) { listeners[name].push(f); },
     grab(piece, anchorRest, target) { grab = { piece, anchor: v3.sub(anchorRest, piece.com), target }; piece.restTime = 0; piece.held = false; piece.body?.wakeUp(); },
     moveGrab(target) { if (grab) grab.target = target; },
