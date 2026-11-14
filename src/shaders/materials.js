@@ -187,30 +187,33 @@ Surface materialSurface(SurfaceInput si) {
 `;
 
 const SLATE = `
+float slateHeight(vec2 p) {
+  vec2 warp = vec2(fbm3(vec3(p * 6.0, 1.3)), fbm3(vec3(p * 6.0, 7.1))) - 0.5;
+  float h = fbm3(vec3((p + warp * 0.03) * vec2(22.0, 30.0), 0.0));
+  float terrace = floor(h * 6.0) / 6.0 + smoothstep(0.75, 1.0, fract(h * 6.0)) / 6.0;
+  return terrace;
+}
 Surface materialSurface(SurfaceInput si) {
   vec3 w = si.world;
   float px = si.pixel;
   Surface s = defaultSurface(normalize(si.normal));
-  vec3 q = vec3(w.x * 1.0 + w.z * 0.35, w.y, w.z * 1.0 - w.x * 0.35);
-  float layers = fbm3(vec3(q.x * 14.0, 0.0, q.z * 40.0));
-  float terrace = floor(layers * 7.0) / 7.0;
-  float step_ = fract(layers * 7.0);
-  float ledge = smoothstep(0.85, 1.0, step_) * (1.0 - smoothstep(0.0, 0.002, px));
-  float grain = vnoise(w * 2400.0);
+  vec2 p = vec2(w.x * 0.94 + w.z * 0.34, w.z * 0.94 - w.x * 0.34);
+  float h = slateHeight(p);
+  float e = 0.0015;
+  vec2 g = vec2(slateHeight(p + vec2(e, 0.0)) - h, slateHeight(p + vec2(0.0, e)) - h) / e;
   float grainK = 1.0 - smoothstep(0.00006, 0.0003, px);
-  float flecks = smoothstep(0.82, 0.92, vnoise(w * 900.0 + 3.0)) * grainK;
-  vec3 col = vec3(0.026, 0.028, 0.031) * (0.8 + 0.45 * terrace) * (0.9 + 0.2 * mix(0.5, grain, grainK));
-  col += vec3(0.02, 0.021, 0.022) * flecks + vec3(0.025) * ledge;
+  float grain = vnoise(w * 2600.0);
+  float grain2 = vnoise(w * 2600.0 + 9.0);
+  float mottle = fbm3(w * 9.0);
+  float flecks = smoothstep(0.86, 0.94, vnoise(w * 1100.0 + 3.0)) * grainK;
+  vec3 col = vec3(0.028, 0.03, 0.033) * (0.75 + 0.5 * h) * (0.85 + 0.3 * mottle) * (0.9 + 0.2 * mix(0.5, grain, grainK));
+  col += vec3(0.018, 0.019, 0.02) * flecks;
   s.albedo = col;
-  s.roughness = 0.62 + 0.18 * (1.0 - terrace) - 0.12 * flecks + 0.1 * (grain - 0.5) * grainK;
-  s.f0 = vec3(0.045);
-  float e = 0.0012;
-  float lx = fbm3(vec3((q.x + e) * 14.0, 0.0, q.z * 40.0)) - layers;
-  float lz = fbm3(vec3(q.x * 14.0, 0.0, (q.z + e) * 40.0)) - layers;
-  vec3 g = vec3(lx, 0.0, lz) / e * 0.0009 + vec3(grain - 0.5, 0.0, vnoise(w * 2400.0 + 9.0) - 0.5) * 0.06 * grainK;
-  s.N = perturb(s.N, g, 1.0);
-  s.clearcoat = 0.12;
-  s.clearcoatRoughness = 0.3;
+  s.roughness = clamp(0.72 - 0.12 * h + 0.08 * (mottle - 0.5) - 0.15 * flecks, 0.4, 0.9);
+  s.f0 = vec3(0.04);
+  vec3 grad = vec3(g.x, 0.0, g.y) * 0.00025 + vec3(grain - 0.5, 0.0, grain2 - 0.5) * 0.08 * grainK;
+  s.N = perturb(s.N, grad, 1.0);
+  s.cavity = 0.85 + 0.15 * h;
   applyWetness(s, si);
   return s;
 }

@@ -80,14 +80,14 @@ export const SCENES = {
   studio: {
     label: 'Studio',
     env: {
-      top: [0.42, 0.42, 0.43], horizon: [0.55, 0.55, 0.55], bottom: [1.0, 0.99, 0.98],
+      top: [0.4, 0.4, 0.41], horizon: [0.5, 0.5, 0.5], bottom: [0.85, 0.84, 0.83],
       lights: [
-        light([0.235, 0.883, -0.407], [0, 1, 0], [0.64, 0.51], [1, 0.99, 0.97], 2.6, 0.35),
-        light([0.0, 0.3, 1], [0, 1, 0], [1.0, 0.75], [1, 0.995, 0.99], 1.0, 0.6),
+        light([0.235, 0.883, -0.407], [0, 1, 0], [0.64, 0.51], [1, 0.99, 0.97], 3.0, 0.2),
+        light([0.0, 0.3, 1], [0, 1, 0], [1.0, 0.75], [1, 0.995, 0.99], 0.72, 0.6),
         light([-0.75, 0.35, -0.55], [0, 1, 0], [0.4, 0.12], [1, 1, 1], 1.2, 0.25),
       ],
     },
-    envIntensity: 1, keyIntensity: 1, exposure: 1.2, background: [2, 1, 0, 0],
+    envIntensity: 1, keyIntensity: 1, exposure: 1.3, background: [2, 1, 0, 0],
     occluder: { bounce: 0.6, leak: 0.6, mfp: [0.009, 0.0032, 0.0012] },
     grade: { white: 1.3, contrast: 1.0, saturation: 1.06, vignette: 0, grain: 0.004, bloom: 0.04, bloomThreshold: 2.4 },
     backdrop: [{ material: 'cove', data: coveMesh, color: [0.9, 0.9, 0.9, 1] }],
@@ -126,7 +126,7 @@ export const SCENES = {
       top: [0.004, 0.004, 0.0045], horizon: [0.002, 0.002, 0.0022], bottom: [0.0005, 0.0005, 0.0005],
       lights: [
         light([-0.62, 0.42, -0.66], [0, 1, 0], [0.3, 0.12], [1, 0.94, 0.86], 26, 0.25),
-        light([0.5, 0.45, 0.75], [0, 1, 0], [0.7, 0.5], [0.85, 0.9, 1], 0.09, 0.6),
+        light([0.5, 0.45, 0.75], [0, 1, 0], [0.7, 0.5], [0.95, 0.95, 1], 0.14, 0.6),
       ],
     },
     envIntensity: 1, keyIntensity: 1, exposure: 1.3, background: [3, 1, 1, 0], groundReach: 0.07,
