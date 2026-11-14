@@ -79,7 +79,7 @@ export function slicePiece(mesh, point, normal) {
   const grid = capGrid(hull.map((h) => h[2]), centre);
   emitCap(neg, grid, n, negId);
   emitCap(pos, grid, v3.scale(n, -1), posId);
-  return [pos.mesh({ planes, params: mesh.params }), neg.mesh({ planes, params: mesh.params })];
+  return [pos.mesh({ planes, params: mesh.params, support: mesh.support }), neg.mesh({ planes, params: mesh.params, support: mesh.support })];
 }
 
 function capGrid(boundary, centre) {

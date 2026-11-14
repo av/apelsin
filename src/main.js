@@ -100,6 +100,7 @@ function boot() {
       const p = orangeParams(state.variety, state.seed);
       renderer.setOrange(packOrange(p));
       world.newOrange(p, { tilt: opts.tilt ?? true });
+      renderer.setShape(world.shape);
       ui?.sync();
       return world.pieces.length;
     },

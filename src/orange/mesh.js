@@ -1,28 +1,17 @@
-import { clamp, v3 } from '../math.js';
+import { v3 } from '../math.js';
+import { createShape } from './shape.js';
 
 export const STRIDE = 7;
 
-const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+const shapes = new WeakMap();
 
-export function shapeRadius(p, d) {
-  const x = d[0], y = d[1], z = d[2];
-  const r = 1 / Math.sqrt((x * x + z * z) / (p.a * p.a) + (y * y) / (p.c * p.c));
-  let lump = 0;
-  for (let i = 0; i < 4; i++) {
-    const l = p.lumps[i];
-    lump += l[3] * Math.cos((x * l[0] + y * l[1] + z * l[2]) * p.lumpFreq + p.lumpPhase[i]);
-  }
-  const up = Math.max(y, 0);
-  const shoulder = p.shoulder * up * up * (1 - up * up) * 4;
-  const th = Math.acos(clamp(y, -1, 1));
-  const dip = p.stemDip * Math.exp(-(th * th) / (p.stemDipWidth * p.stemDipWidth));
-  const psi = Math.atan2(z, x + 1e-7);
-  const rc = (p.calyx / p.a) * (0.8 + 0.2 * Math.cos(5 * psi));
-  const calyx = 0.0008 * (1 - smooth(rc * 0.55, rc, th));
-  const tn = Math.PI - th;
-  const navel = p.navel * (Math.exp(-(tn * tn) / 0.01) - 0.6 * Math.exp(-(tn * tn) / 0.0012));
-  return r * (1 + lump + shoulder) - dip + calyx - navel;
+export function shapeOf(p) {
+  let s = shapes.get(p);
+  if (!s) { s = createShape(p.seed ?? 1, p); shapes.set(p, s); }
+  return s;
 }
+
+export function shapeRadius(p, d) { return shapeOf(p).radius(d); }
 
 export function shapePoint(p, d) {
   const n = v3.norm(d);

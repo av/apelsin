@@ -1,4 +1,5 @@
-import { orangeMesh, hullPoints, shapeRadius } from './orange/mesh.js';
+import { orangeMesh, hullPoints, shapeRadius, shapeOf } from './orange/mesh.js';
+import { supportPlanes } from './orange/proxy.js';
 import { slicePiece } from './orange/slice.js';
 import { createPiece, updateModel, disposePiece, worldToRest, worldDirToRest, restToWorld, drawable } from './orange/piece.js';
 import { quat, v3, mulberry32 } from './math.js';
@@ -49,9 +50,16 @@ export function createWorld(gl, { juice, audio }) {
 
   function newOrange(params, { tilt = true } = {}) {
     clear();
+    const key = `${params.variety}:${params.seed}`;
+    if (!w.baseMesh || w.baseMesh.key !== key) {
+      const mesh = orangeMesh(params);
+      mesh.support = supportPlanes(mesh);
+      w.baseMesh = { key, params, mesh };
+    }
+    params = w.baseMesh.params;
     w.params = params;
+    w.shape = shapeOf(params);
     w.cuts = 0;
-    if (!w.baseMesh || w.baseMesh.params !== params) w.baseMesh = { params, mesh: orangeMesh(params) };
     const piece = createPiece(gl, w.baseMesh.mesh);
     let rot = quat.identity();
     if (tilt) {
