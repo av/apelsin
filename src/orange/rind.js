@@ -50,40 +50,43 @@ void tangents(vec3 d, out vec3 t1, out vec3 t2) {
   t1 = normalize(cross(abs(d.y) < 0.99 ? vec3(0, 1, 0) : vec3(1, 0, 0), d));
   t2 = cross(d, t1);
 }
-float pitHeight(vec3 d, float R, vec4 g, out float core, out vec3 gid) {
+float pitHeight(vec3 d, float R, vec4 g, float vis, out float core, out vec3 gid) {
   vec3 u = normalize(g.xyz);
   vec3 e = (d - u * dot(d, u)) * R;
   vec3 a1, a2;
   tangents(u, a1, a2);
   gid = hash33(g.xyz * 1.0e5 + 17.0);
   vec3 gid2 = hash33(g.xyz * 1.0e5 + 59.0);
+  vec3 gid3 = hash33(g.xyz * 1.0e5 + 101.0);
   float ang = gid.x * 6.2831853;
   vec2 x = vec2(dot(e, a1), dot(e, a2));
   x = mat2(cos(ang), sin(ang), -sin(ang), cos(ang)) * x;
-  float ell = 1.0 + 0.35 * gid.y;
+  float ell = 1.0 + 0.8 * gid.y * gid.y;
   x *= vec2(1.0 / sqrt(ell), sqrt(ell));
   float th = atan(x.y, x.x);
-  float lobes = 1.0 + 0.12 * gid2.y * cos(2.0 * th + gid2.z * 6.28) + 0.08 * gid.z * cos(3.0 * th + gid2.x * 6.28);
-  float s = g.w * mix(1.3, 1.8, gid2.x);
+  float lobes = 1.0 + 0.16 * gid2.y * cos(2.0 * th + gid2.z * 6.28) + 0.1 * gid.z * cos(3.0 * th + gid2.x * 6.28);
   float lx = length(x);
-  float rr = lx / mix(1.0, lobes, smoothstep(0.0, s * 0.8, lx));
-  float vis = uCushion.z * (0.65 + 0.7 * vnoise(d * R * 1000.0 / 6.5 + uSeed.yzx * 20.0));
-  float depth = uCushion.x * mix(0.5, 1.3, gid2.z) * vis * sqrt(g.w / 0.00033);
-  float sc = max(g.w * mix(0.5, 0.7, gid.y), 0.00016);
-  float cd = uCushion.y * mix(0.3, 1.4, gid2.z * gid2.z) * vis;
-  core = exp(-pow(lx / (sc * 1.1), 2.0));
-  float S = min(s * 2.0, 0.001), Sc = sc * 2.2;
+  float size = exp(0.32 * (gid3.x + gid3.y - 1.0) * 2.4) * (0.85 + 0.3 * vis);
+  float S = clamp(g.w * 3.0 * size, 0.0005, 0.001 / sqrt(ell));
+  float rr = lx / mix(1.0, lobes, smoothstep(0.0, S * 0.5, lx));
+  float depth = uCushion.x * (0.35 + 1.0 * gid2.z * gid2.z) * (0.5 + 0.8 * vis) * size;
+  float hasCore = step(0.55, gid3.z) * smoothstep(0.2, 0.6, vis);
+  float Sc = clamp(g.w * mix(0.9, 1.4, gid.y), 0.00022, 0.0005);
+  float cd = uCushion.y * mix(0.3, 1.0, gid2.x) * hasCore;
   float w1 = max(1.0 - rr * rr / (S * S), 0.0), w2 = max(1.0 - lx * lx / (Sc * Sc), 0.0);
+  core = w2 * w2 * hasCore + 0.35 * w1 * w1 * w1 * smoothstep(0.5, 1.0, gid2.z);
   return -depth * w1 * w1 * w1 - cd * w2 * w2 * w2;
 }
 struct Pits { float h; float k; vec3 id; };
 Pits pitsAt(vec3 d, float R, vec4 gs[25], int n) {
   Pits P; P.h = 0.0; P.k = 0.0; P.id = vec3(0.5);
   float best = 0.0;
+  vec3 cq = d * R * 1000.0 + uSeed.yzx * 20.0;
+  float vis = smoothstep(0.2, 0.8, vnoise(cq / 4.0) * 0.55 + vnoise(cq / 9.0 + 7.0) * 0.45);
   for (int i = 0; i < 25; i++) {
     if (i >= n) break;
     float core; vec3 id;
-    P.h += pitHeight(d, R, gs[i], core, id);
+    P.h += pitHeight(d, R, gs[i], vis, core, id);
     if (core > best) { best = core; P.id = id; }
   }
   P.k = best;
@@ -158,9 +161,9 @@ float calyxHeight(vec3 d, float poleR, out float sep, out float stub, out float 
   float lift, width, along;
   float x = sepalAngle(psi, lift, width, along);
   float rel = envelopeRelief(d) * 1000.0;
-  sep = smoothstep(0.02, 0.08, rel);
+  sep = smoothstep(0.004, 0.05, rel);
   vec2 P = vec2(cos(psi), sin(psi)) * rho - uStem.xy;
-  stub = smoothstep(uCalyx.z * 1.02, uCalyx.z * 0.96, length(P));
+  stub = smoothstep(uCalyx.z * 1.7, uCalyx.z * 0.9, length(P));
   vein = (1.0 - smoothstep(0.0, 0.12, abs(x))) * smoothstep(uCalyx.z * 1.2, uCalyx.x * 0.9, rho);
   vec3 wq = vec3(cos(psi), sin(psi), 0.0) * rho * 1000.0;
   float wr = vnoise(wq / 0.35 + 5.0) * 0.6 + vnoise(wq / 0.12 + 9.0) * 0.4;
@@ -253,7 +256,7 @@ void main() {
   vec3 gid = P.id;
   float speck = (gid.x - 0.5) * 0.08 + (gid.y > 0.95 ? 0.08 : 0.0);
   col *= 1.0 + speck * P.k;
-  col = mix(col, col * vec3(0.55, 0.42, 0.36), P.k * P.k * 0.8);
+  col = mix(col, col * vec3(0.6, 0.48, 0.42), P.k * P.k * 0.6);
   col *= 1.0 + tone * 0.08;
   float dead = step(0.9992, gid.z) * smoothstep(0.6, 0.9, P.k);
   col = mix(col, col * vec3(0.45, 0.3, 0.2), dead);
@@ -277,21 +280,26 @@ void main() {
     float blot = vnoise(q / 0.9 + 4.0);
     vec3 olive = mix(vec3(0.05, 0.058, 0.01), vec3(0.1, 0.105, 0.02), nz * 0.6 + blot * 0.4);
     olive = mix(olive, vec3(0.12, 0.12, 0.028), vein * 0.35);
-    float edge = smoothstep(0.1, 0.45, envelopeRelief(d) * 1000.0);
+    float edge = smoothstep(0.02, 0.3, envelopeRelief(d) * 1000.0);
     olive = mix(vec3(0.07, 0.05, 0.018), olive, mix(1.0, edge, 0.4 + 0.6 * uStem.z));
     float brown = smoothstep(0.6, 1.0, rho / uCalyx.x) * uStem.z;
     olive = mix(olive, vec3(0.11, 0.07, 0.025) * (0.8 + 0.4 * nz), brown * 0.8);
     float rs = length(vec2(cos(atan(d.z, d.x)), sin(atan(d.z, d.x))) * rho - uStem.xy) / uCalyx.z;
     float ring = vnoise(vec3(rs * 14.0, atan(d.z, d.x) * 2.0, 1.0));
-    vec3 cut = mix(vec3(0.07, 0.08, 0.015), vec3(0.2, 0.2, 0.06), smoothstep(0.55, 0.8, 1.0 - rs));
-    cut = mix(cut, vec3(0.3, 0.29, 0.13), smoothstep(0.55, 0.85, 1.0 - rs) * (0.6 + 0.4 * ring));
-    cut = mix(cut, vec3(0.38, 0.35, 0.2), (1.0 - smoothstep(0.12, 0.3, rs)) * (0.5 + 0.5 * nz));
+    float stria = vnoise(vec3(atan(d.z, d.x) * 9.0, rs * 3.0, 2.0)) * 0.6 + vnoise(vec3(atan(d.z, d.x) * 31.0, rs * 6.0, 5.0)) * 0.4;
+    vec3 bark = mix(vec3(0.06, 0.065, 0.012), vec3(0.13, 0.12, 0.03), stria);
+    bark = mix(bark, vec3(0.12, 0.08, 0.03), smoothstep(0.75, 1.0, rs) * 0.4 * uStem.z);
+    vec3 cut = mix(vec3(0.16, 0.16, 0.045), vec3(0.28, 0.27, 0.12), smoothstep(0.2, 0.45, 0.72 - rs) * (0.6 + 0.4 * ring));
+    cut = mix(cut, vec3(0.36, 0.33, 0.19), (1.0 - smoothstep(0.1, 0.28, rs)) * (0.5 + 0.5 * nz));
+    cut = mix(bark, cut, 1.0 - smoothstep(0.62, 0.78, rs));
     cut *= 0.85 + 0.3 * nz;
     olive = mix(olive, cut, stub);
+    olive = mix(vec3(0.24, 0.14, 0.03), olive, smoothstep(0.25, 0.9, sep));
     col = mix(col, olive, sep);
     rough = mix(rough, mix(0.55, 0.62, stub), sep);
   }
   col = mix(col, col * 0.55, furrow * 0.25);
+  col = mix(col, col * vec3(0.8, 0.92, 0.55), (1.0 - smoothstep(uCalyx.x * 0.9, uCalyx.x * 1.7, rho)) * 0.4);
   if (rho < 0.012) {
     float rel = envelopeRelief(d) * 1000.0;
     float lift0, w0, a0;
@@ -360,7 +368,7 @@ function state(gl) {
     return { tex, width: w, height: h };
   };
   s = {
-    prog, fb: gl.createFramebuffer(), normal: cube(gl.RGBA8), color: cube(gl.SRGB8_ALPHA8),
+    prog, fb: gl.createFramebuffer(), normal: cube(gl.caps.floatTargets ? gl.RGBA16F : gl.RGBA8), color: cube(gl.SRGB8_ALPHA8),
     lemon: tex2d(gl.RGBA8, gl.RGBA, 1, 1, new Uint8Array([128, 128, 128, 255])), tone: tex2d(gl.R8, gl.RED, 1, 1, new Uint8Array([128])),
     lemonOn: false, shape: null, params: null, shapeTex: null,
   };
