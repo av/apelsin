@@ -80,7 +80,7 @@ function stemStub(p, data, o) {
   return o;
 }
 
-export function orangeMesh(p, n = 72) {
+export function orangeMesh(p, n = 60) {
   const tris = 6 * n * n * 2 + STUB_TRIS;
   const data = new Float32Array(tris * 3 * STRIDE);
   let o = 0;
