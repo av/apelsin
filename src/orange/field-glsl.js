@@ -214,7 +214,7 @@ vec3 fleshBase(float w, vec3 id) {
   vec3 c = w < 0.45 ? mix(outer, mid, smoothstep(0.0, 0.45, w)) : mix(mid, inner, smoothstep(0.45, 1.0, w));
   c *= 0.93 + 0.13 * id.x;
   c.g *= 0.95 + 0.1 * id.z;
-  return c;
+  return min(c * vec3(1.0, 1.24, 1.0) + vec3(0.0, 0.0, 0.03), vec3(1.0));
 }
 
 float deepWalls(vec3 p, vec3 dirIn, int samples, vec3 own, out float septa) {
