@@ -38,7 +38,7 @@ The realism bar is `/tmp/apelsin-work/refs/ivan-reference-wedges.jpg` (when pres
 
 ## Contracts
 
-- **Uniform blocks**: `Frame` (binding 0, `src/shaders/common.js`; packed in `renderer.js fillFrame` with the offsets in `F`), `Orange` (binding 1, `src/orange/glsl.js`; packed by `packOrange`). If you add a field, update the GLSL block, the float count and the packer together.
+- **Uniform blocks**: `Frame` (binding 0, `src/shaders/common.js`; packed in `renderer.js fillFrame` with the offsets in `F`), `Orange` (binding 1, `src/orange/glsl.js`; packed by `packOrange`). If you add a field, update the GLSL block, the float count and the packer together. Orange ends with `oFleshDeep` (flesh colour next to the dorsal wall, w = core paleness, negative means more saturated toward the core), `oFleshWall` (vesicle wall colour), `oExtra` (wax coat weight, pebble amplitude in metres, navel opening in radians, hollow core fraction); `oRindStem.w` is the stem tint amount.
 - **Per-draw uniforms**: `uModel`, `uPrevModel` (for velocity), `uMaterialColor`.
 - **Surface**: each material defines `Surface materialSurface(SurfaceInput si)` and returns a world-space `N`. `SurfaceInput` holds `rest`, `restNormal`, `world`, `normal`, `V`, `cap` (1 on cut faces), `restToWorld`, `pixel` (world size of a pixel, for `fwidth`-style filtering). The lighting (`shadeSurface`) never knows about anatomy.
 - **Surface field meanings**: `sssProfile` is 0 none, 1 rind, 2 pith/core, 3 flesh, with `sssWidth` in 0..1. They are encoded into diffuse alpha by `encodeProfile`. `sssColor` tints the wrapped terminator light. `transmission` is lit through shadow-map thickness. `cavity` multiplies the AO. `emission` goes into the specular target.
