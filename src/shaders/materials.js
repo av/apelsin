@@ -61,8 +61,9 @@ void applyWetness(inout Surface s, SurfaceInput si) {
 const COVE = `
 Surface materialSurface(SurfaceInput si) {
   Surface s = defaultSurface(normalize(si.normal));
-  float n = vnoise(si.world * 900.0);
-  s.albedo = uMaterialColor.rgb * (0.985 + 0.03 * n);
+  float fine = 1.0 - smoothstep(0.0001, 0.0004, si.pixel);
+  float n = mix(0.5, vnoise(si.world * 2600.0), fine);
+  s.albedo = uMaterialColor.rgb * (0.99 + 0.02 * n);
   s.roughness = 0.62;
   s.f0 = vec3(0.03);
   applyWetness(s, si);

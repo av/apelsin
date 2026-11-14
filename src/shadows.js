@@ -48,7 +48,7 @@ vec2 heightAt(vec2 uv) {
 float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
 void main() {
   float worldPerUv = uParams.x, reach = uParams.y, maxHeight = uParams.z;
-  float jitter = 0.5;
+  float jitter = hash(vUv * 917.0);
   float vis = 0.0;
   vec3 bent = vec3(0.0);
   for (int i = 0; i < DIRS; i++) {
@@ -104,13 +104,35 @@ void main() {
   outKey = vec4(wsum > 0.0 ? key / wsum : vec3(1.0), 1.0);
 }`;
 
+const GROUND_BLUR_FS = `
+uniform sampler2D uAO;
+uniform sampler2D uKey;
+uniform vec2 uDir;
+in vec2 vUv;
+layout(location = 0) out vec4 outAO;
+layout(location = 1) out vec4 outKey;
+void main() {
+  vec4 a = vec4(0.0), k = vec4(0.0);
+  float w = 0.0;
+  for (int i = -4; i <= 4; i++) {
+    float g = exp(-float(i * i) / 8.0);
+    vec2 uv = vUv + uDir * float(i);
+    a += texture(uAO, uv) * g;
+    k += texture(uKey, uv) * g;
+    w += g;
+  }
+  outAO = a / w;
+  outKey = k / w;
+}`;
+
 export function createShadows(gl, initialSize, initialGround = 384) {
   const prog = program(gl, UBER_VS, uberFragment(null, 'shadow'), { label: 'shadow', defines: { SHADOW: 1 } });
   const floats = gl.caps.floatTargets;
   const extentProg = floats ? program(gl, EXTENT_VS, EXTENT_FS, { label: 'shadow-extent' }) : null;
   const groundProg = floats ? program(gl, FULLSCREEN_VS, GROUND_AO_FS, { label: 'ground-ao' }) : null;
+  const groundBlurProg = floats ? program(gl, FULLSCREEN_VS, GROUND_BLUR_FS, { label: 'ground-blur' }) : null;
   const backFormat = gl.caps.halfBlend ? { internal: gl.R32F, format: gl.RED, type: gl.FLOAT } : { internal: gl.R16F, format: gl.RED, type: gl.HALF_FLOAT };
-  let map = null, back = null, height = null, ground = null, groundSize = 0, keySamples = 5;
+  let map = null, back = null, height = null, ground = null, groundTmp = null, groundSize = 0, keySamples = 5;
 
   function allocate(size, gs) {
     if (map) { gl.deleteFramebuffer(map.fb); gl.deleteTexture(map.depth.tex); }
@@ -127,9 +149,11 @@ export function createShadows(gl, initialSize, initialGround = 384) {
       if (back) { gl.deleteFramebuffer(back.fb); gl.deleteTexture(back.colors[0].tex); }
       back = fbo(gl, [target(gl, size >> 1, size >> 1, backFormat, { filter: gl.NEAREST })]);
       if (gs !== groundSize) {
-        if (height) { gl.deleteFramebuffer(height.fb); gl.deleteTexture(height.colors[0].tex); gl.deleteFramebuffer(ground.fb); ground.colors.forEach((c) => gl.deleteTexture(c.tex)); }
+        if (height) for (const f of [height, ground, groundTmp]) { gl.deleteFramebuffer(f.fb); f.colors.forEach((c) => gl.deleteTexture(c.tex)); }
         height = fbo(gl, [target(gl, gs, gs, { internal: gl.RG16F, format: gl.RG, type: gl.HALF_FLOAT }, { filter: gl.NEAREST })]);
-        ground = fbo(gl, [target(gl, gs, gs, { internal: gl.RGBA8, format: gl.RGBA, type: gl.UNSIGNED_BYTE }), target(gl, gs, gs, { internal: gl.RGBA8, format: gl.RGBA, type: gl.UNSIGNED_BYTE })]);
+        const rgba8 = { internal: gl.RGBA8, format: gl.RGBA, type: gl.UNSIGNED_BYTE };
+        ground = fbo(gl, [target(gl, gs, gs, rgba8), target(gl, gs, gs, rgba8)]);
+        groundTmp = fbo(gl, [target(gl, gs, gs, rgba8), target(gl, gs, gs, rgba8)]);
         groundSize = gs;
       }
     }
@@ -219,6 +243,13 @@ export function createShadows(gl, initialSize, initialGround = 384) {
       uHeight: height.colors[0], uParams: [2 * state.groundHalf, state.groundReach, state.groundTop, state.groundShadowReach],
       uKeyDir: [...k.dir, k.tanX], uKeyUp: [...(k.up || [0, 1, 0]), k.tanY], uLeakTint: [...state.leak.tint, 0], uMfp: [...state.leak.mfp, state.leak.strength], uKeySamples: keySamples,
     });
+    fullscreen(gl);
+    const texel = 1 / groundSize;
+    bind(gl, groundTmp);
+    use(groundBlurProg, { uAO: ground.colors[0], uKey: ground.colors[1], uDir: [texel, 0] });
+    fullscreen(gl);
+    bind(gl, ground);
+    use(groundBlurProg, { uAO: groundTmp.colors[0], uKey: groundTmp.colors[1], uDir: [0, texel] });
     fullscreen(gl);
     gl.clearColor(0, 0, 0, 1);
     state.groundReady = true;
