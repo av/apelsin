@@ -41,7 +41,8 @@ export function createCamera() {
     cam.target = v3.lerp(cam.target, cam.goal.target, k);
     cam.viewportHeight = height;
     const cp = Math.cos(cam.pitch);
-    cam.eye = v3.add(cam.target, v3.scale([Math.sin(cam.yaw) * cp, Math.sin(cam.pitch), Math.cos(cam.yaw) * cp], cam.distance));
+    const portrait = Math.max(1, 0.8 / (width / height));
+    cam.eye = v3.add(cam.target, v3.scale([Math.sin(cam.yaw) * cp, Math.sin(cam.pitch), Math.cos(cam.yaw) * cp], cam.distance * portrait));
     if (cam.eye[1] < cam.floorY + 0.008) cam.eye[1] = cam.floorY + 0.008;
     cam.aspect = width / height;
     cam.prevViewProjNJ.set(cam.viewProjNJ);

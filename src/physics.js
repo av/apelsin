@@ -30,7 +30,7 @@ export async function createPhysics(rapierUrl = '../vendor/rapier/rapier.mjs') {
       .setTranslation(...piece.position)
       .setRotation({ x: piece.rotation[0], y: piece.rotation[1], z: piece.rotation[2], w: piece.rotation[3] })
       .setLinvel(...linvel).setAngvel({ x: angvel[0], y: angvel[1], z: angvel[2] })
-      .setCcdEnabled(true).setLinearDamping(0.05).setAngularDamping(0.25);
+      .setCcdEnabled(true).setLinearDamping(0.05).setAngularDamping(0.9);
     const body = world.createRigidBody(desc);
     const pts = hullPoints(piece.geometry, piece.com);
     let cd = R.ColliderDesc.convexHull(pts);

@@ -54,7 +54,8 @@ export function createWorld(gl, { juice, audio, rng }) {
     let rot = quat.identity();
     if (tilt) {
       const axis = v3.norm([rng() - 0.5, 0, rng() - 0.5]);
-      rot = quat.mul(quat.axisAngle([0, 1, 0], rng() * Math.PI * 2), quat.axisAngle(axis, 0.06 + rng() * 0.12));
+      const lean = params.c > params.a * 1.005 ? Math.PI / 2 - 0.12 + rng() * 0.1 : 0.06 + rng() * 0.12;
+      rot = quat.mul(quat.axisAngle([0, 1, 0], rng() * Math.PI * 2), quat.axisAngle(axis, lean));
     }
     place(piece, [0, w.floorAt(0, 0), 0], rot);
     add(piece);
