@@ -249,7 +249,7 @@ void main() {
   vec3 gid = P.id;
   float speck = (gid.x - 0.5) * 0.08 + (gid.y > 0.95 ? 0.08 : 0.0);
   col *= 1.0 + speck * P.k;
-  col = mix(col, col * vec3(0.95, 0.9, 0.86), P.k * P.k * 0.4);
+  col = mix(col, col * vec3(0.78, 0.66, 0.6), P.k * P.k * 0.55);
   col *= 1.0 + tone * 0.08;
   float dead = step(0.9992, gid.z) * smoothstep(0.6, 0.9, P.k);
   col = mix(col, col * vec3(0.45, 0.3, 0.2), dead);
@@ -259,10 +259,11 @@ void main() {
     if (sc.w <= 0.0) continue;
     float dd = length(d - normalize(sc.xyz)) * R;
     float nz = vnoise(q / 1.4 + float(i) * 13.0) * 0.6 + vnoise(q / 0.5 + float(i) * 5.0) * 0.4;
-    float k = smoothstep(0.62, 0.7, (1.0 - dd / sc.w) * 0.8 + nz * 0.5);
-    col = mix(col, vec3(0.42, 0.27, 0.12) * (0.8 + 0.4 * nz), k * 0.7);
-    rough = mix(rough, 0.72, k);
-    g += (t1 * (nz - 0.5) + t2 * (vnoise(q / 0.6 + 2.0) - 0.5)) * 0.15 * k;
+    float n2 = vnoise(q / 0.18 + float(i) * 7.0);
+    float k = smoothstep(0.55, 0.75, (1.0 - dd / sc.w) * 0.7 + nz * 0.45 + n2 * 0.15) * (0.4 + 0.6 * n2);
+    col = mix(col, col * vec3(0.62, 0.5, 0.42) + vec3(0.03, 0.02, 0.008), k * 0.6);
+    rough = mix(rough, 0.62, k);
+    g += (t1 * (nz - 0.5) + t2 * (vnoise(q / 0.6 + 2.0) - 0.5)) * 0.12 * k;
   }
   float sm = length(d - normalize(uSmudge.xyz)) * R / uSmudge.w;
   float ridges = 0.5 + 0.5 * sin(dot(p * 1000.0, normalize(cross(uSmudge.xyz, vec3(0.3, 1.0, 0.2)))) * 13.0 + 3.0 * vnoise(q / 1.5));
@@ -387,17 +388,17 @@ function rindUniforms(shape, p) {
   const sepals = new Float32Array(24);
   cx.sepals.slice(0, 6).forEach((s, i) => sepals.set([s.angle, s.length, s.width, s.lift], i * 4));
   const scars = new Float32Array(12);
-  const nScar = Math.floor(rnd() * 3.2);
+  const nScar = Math.floor(rnd() * 2.6);
   for (let i = 0; i < 3; i++) scars.set(i < nScar ? [...dir(), 0.0015 + rnd() * 0.004] : [0, 1, 0, 0], i * 4);
   const rind = p.rind || [0.855, 0.254, 0.003];
   const tint = 0.92 + rnd() * 0.16;
   return {
     uSeed: [rnd(), rnd(), rnd(), rnd()],
-    uBase: [rind[0] * tint, rind[1] * (1.05 + rnd() * 0.35), rind[2]],
+    uBase: [rind[0] * tint, rind[1] * (1.02 + rnd() * 0.26), rind[2]],
     uStemCol: [...(p.rindStem || [0.591, 0.06, 0]), 0.35 + rnd() * 0.35],
     uPal: [0.12 + rnd() * 0.25, 0.08 + rnd() * 0.22, 0.06 + rnd() * 0.08, rnd() < 0.3 ? rnd() * 0.25 : 0],
     uUndul: [0.00009 + rnd() * 0.00008, 0.00005 + rnd() * 0.00004, 0.000015 + rnd() * 0.000015, 0.06 + rnd() * 0.03],
-    uCushion: [0.00018 + rnd() * 0.0001, 0.00006 + rnd() * 0.00004, 1, 0],
+    uCushion: [0.00022 + rnd() * 0.0001, 0.00007 + rnd() * 0.00004, 1, 0],
     uCalyx: [cx.radius, cx.inner, cx.stemR, cx.stemH],
     uStem: [cx.stemTilt[0] * cx.stemH * 0.6, cx.stemTilt[1] * cx.stemH * 0.6, cx.brown, 4 + Math.floor(rnd() * 5)],
     uNavel: [shape.navelOpen > 0.02 ? shape.navelOpen : 0, shape.navelDepth || 0, 7 + Math.floor(rnd() * 4), 0],

@@ -10,8 +10,8 @@ void rindFootprint(SurfaceInput si, vec3 Nm, float rl, out vec3 dx, out vec3 dy)
   vec3 ta = Vr - Nm * dot(Nm, Vr);
   ta = dot(ta, ta) > 1e-8 ? normalize(ta) : normalize(cross(Nm, abs(Nm.y) < 0.9 ? vec3(0, 1, 0) : vec3(1, 0, 0)));
   vec3 tb = cross(Nm, ta);
-  float px = max(si.pixel, 1e-6) / rl;
-  dx = ta * px / NoV;
+  float px = max(si.pixel, 1e-6) * 0.7 / rl;
+  dx = ta * px / sqrt(NoV);
   dy = tb * px;
 }
 Surface rindSurface(SurfaceInput si) {
