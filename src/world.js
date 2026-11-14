@@ -11,9 +11,11 @@ export function createWorld(gl, { juice, audio }) {
   function hull(piece) { return piece.hull || (piece.hull = hullPoints(piece.geometry, piece.com)); }
 
   function lowestY(piece, rotation = piece.rotation) {
-    const h = hull(piece);
+    const [x, y, z, q] = rotation;
+    const rx = 2 * (x * y + q * z), ry = 1 - 2 * (x * x + z * z), rz = 2 * (y * z - q * x);
+    const d = piece.geometry.data, c = piece.com;
     let lo = Infinity;
-    for (let i = 0; i < h.length; i += 3) lo = Math.min(lo, quat.rotate(rotation, [h[i], h[i + 1], h[i + 2]])[1]);
+    for (let i = 0; i < piece.geometry.count; i++) lo = Math.min(lo, rx * (d[i * 7] - c[0]) + ry * (d[i * 7 + 1] - c[1]) + rz * (d[i * 7 + 2] - c[2]));
     return lo;
   }
 

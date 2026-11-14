@@ -3,7 +3,7 @@ import { quat, v3 } from './math.js';
 export const PRESET_NAMES = ['whole', 'halves', 'wedges', 'wheels', 'reference'];
 
 const deg = Math.PI / 180;
-const HALF_TILT = 52 * deg;
+const HALF_TILT = 58 * deg;
 
 function cameraFrame(yaw) {
   return { right: [Math.cos(yaw), 0, -Math.sin(yaw)], toCamera: [Math.sin(yaw), 0, Math.cos(yaw)] };
@@ -44,9 +44,9 @@ const LAYOUTS = {
     const back = quat.mul(quat.axisAngle([0, 1, 0], 0.9), quat.fromTo(bottom.caps[0].normal, [0, 1, 0]));
     const backAt = v3.add(v3.scale(right, 0.02), v3.scale(toCamera, -a * 0.75));
     app.world.place(bottom, onPlane(app.world, backAt[0], backAt[2]), back, { drop: 0.001 });
-    const face = v3.norm(v3.add(v3.scale(toCamera, Math.cos(HALF_TILT)), [0, Math.sin(HALF_TILT), 0]));
+    const face = v3.norm(v3.add(v3.scale(v3.norm(v3.sub(toCamera, v3.scale(right, 0.45))), Math.cos(HALF_TILT)), [0, Math.sin(HALF_TILT), 0]));
     const front = quat.mul(quat.axisAngle(face, 0.4), quat.fromTo(top.caps[0].normal, face));
-    const frontAt = v3.add(v3.scale(right, -0.022), v3.scale(toCamera, a * 0.55));
+    const frontAt = v3.add(v3.scale(right, -0.022), v3.scale(toCamera, a * 0.85));
     app.world.place(top, onPlane(app.world, frontAt[0], frontAt[2]), front, { drop: 0.001 });
     app.settle();
     frame(app, { pitch: 0.42, distance: 0.34, height: 0.022 });

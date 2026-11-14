@@ -1,4 +1,5 @@
 import { quat, v3 } from './math.js';
+import { shapeRadius } from './orange/mesh.js';
 
 export const STEP = 1 / 120;
 
@@ -54,13 +55,17 @@ export function contactBalls(piece) {
   const cand = [];
   const step = Math.max(1, Math.round(tris / 9000));
   const capList = piece.caps.map((cp) => [cp.normal[0], cp.normal[1], cp.normal[2], cp.d]);
+  const shape = piece.geometry.params;
+  const capById = new Map(piece.caps.map((cp) => [cp.id, cp.normal]));
   for (let k = 0; k < tris; k += step) {
     const t = k * 3 * S;
     const cx = (data[t] + data[t + S] + data[t + 2 * S]) / 3, cy = (data[t + 1] + data[t + S + 1] + data[t + 2 * S + 1]) / 3, cz = (data[t + 2] + data[t + S + 2] + data[t + 2 * S + 2]) / 3;
     let nx = data[t + 3] + data[t + S + 3] + data[t + 2 * S + 3], ny = data[t + 4] + data[t + S + 4] + data[t + 2 * S + 4], nz = data[t + 5] + data[t + S + 5] + data[t + 2 * S + 5];
+    const flat = data[t + 6] > 0.5;
+    const plane = flat ? capById.get(data[t + 6]) : null;
+    if (plane) { nx = plane[0]; ny = plane[1]; nz = plane[2]; }
     const nl = Math.hypot(nx, ny, nz) || 1;
     const ux = -nx / nl, uy = -ny / nl, uz = -nz / nl;
-    const flat = data[t + 6] > 0.5;
     const bb = cx * ux + cy * uy + cz * uz, cc = cx * cx + cy * cy + cz * cz - rmax * rmax;
     let thick = -bb + Math.sqrt(Math.max(0, bb * bb - cc));
     for (const [px, py, pz, pd] of capList) {
@@ -68,13 +73,26 @@ export function contactBalls(piece) {
       if (den > 1e-6) thick = Math.min(thick, (pd - (px * cx + py * cy + pz * cz)) / den);
     }
     const R = Math.sqrt(cx * cx + cy * cy + cz * cz);
+    const fitInside = (r0, tol) => {
+      let rr = r0;
+      for (let it = 0; it < 8; it++) {
+        const px = cx + ux * rr, py = cy + uy * rr, pz = cz + uz * rr, pl = Math.hypot(px, py, pz) || 1;
+        if (pl + rr <= shapeRadius(shape, [px / pl, py / pl, pz / pl]) + tol) break;
+        rr *= 0.7;
+      }
+      return rr;
+    };
     let r;
     if (flat) {
       const dn = -(cx * ux + cy * uy + cz * uz);
       const planar = Math.sqrt(Math.max(0, R * R - dn * dn));
       const room = Math.sqrt(Math.max(0, rmax * rmax - dn * dn)) - planar;
       r = Math.min(flatMax, thick * 0.45, Math.max(0.0012, room));
-    } else r = Math.min(R * 0.5, thick * 0.47, 0.016);
+      if (shape && room < r * 3) r = fitInside(r, -0.00005);
+    } else {
+      r = Math.min(R * 0.5, thick * 0.47, 0.016);
+      if (shape) r = fitInside(r, 0.0003);
+    }
     for (const [px, py, pz, pd] of capList) {
       const kk = 1 + px * ux + py * uy + pz * uz;
       if (kk > 1e-3) r = Math.min(r, (pd - (px * cx + py * cy + pz * cz)) / kk);
@@ -289,9 +307,10 @@ export async function createPhysics(rapierUrl = '../vendor/rapier/rapier.mjs') {
 
   function settle(pieces, seconds = 3) {
     const steps = Math.round(seconds / STEP);
-    for (const p of pieces) { p.held = false; p.restTime = 0; p.freshUntil = 0; }
+    for (const p of pieces) { p.held = false; p.restTime = 0; p.freshUntil = clock + 0.6; }
     for (let i = 0; i < steps; i++) {
       world.step(events);
+      clock += STEP;
       collectContacts(false);
       for (const p of pieces) settleStep(p, STEP);
       if (i > 30 && pieces.every((p) => !p.body || p.held || p.body.isSleeping())) break;

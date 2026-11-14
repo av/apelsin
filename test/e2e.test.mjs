@@ -650,6 +650,7 @@ test('settled pieces touch the floor: no visible gap and no sinking', async () =
       assert.ok(g < 0.0005 || g > 0.003, `${label}: a piece hovers ${(g * 1000).toFixed(2)} mm above the floor`);
     }
     assert.ok(gaps.some((g) => Math.abs(g) < 0.0005), `${label}: something rests on the floor`);
+    if (/halves|reference|knife/.test(label)) assert.ok(gaps.every((g) => Math.abs(g) < 0.0005), `${label}: every piece rests on the floor ${gaps}`);
   };
   for (const name of ['halves', 'wedges', 'wheels', 'reference']) {
     await page.evaluate((n) => window.apelsin.preset(n), name);
