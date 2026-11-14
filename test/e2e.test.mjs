@@ -524,7 +524,7 @@ test('the page has a title, description, social tags and an orange favicon; the 
   assert.ok(meta.description.length > 40);
   assert.ok(meta.og);
   assert.match(meta.icon, /^data:image\/svg\+xml/);
-  assert.ok(meta.tips.includes('Knife · K') && meta.tips.some((t) => /Macro/.test(t)));
+  assert.ok(meta.tips.includes('Knife · K'));
   assert.equal(await page.evaluate(() => document.getElementById('hint').classList.contains('gone')), false);
   await page.evaluate(() => window.apelsin.cut([0, 0.04, 0], [1, 0, 0]));
   assert.equal(await page.evaluate(() => document.getElementById('hint').classList.contains('gone')), false, 'api cuts are not user cuts');

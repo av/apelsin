@@ -34,7 +34,7 @@ function boot() {
 
   const state = {
     seed: params.has('seed') ? (parseInt(params.get('seed'), 10) >>> 0) : (Math.random() * 1e9) >>> 0,
-    tool: 'knife', preset: 'whole', macro: false,
+    tool: 'knife', preset: 'whole',
     quality: pick('q', TIER_NAMES, phone ? 'medium' : 'high'), forcedQuality: TIER_NAMES.includes(params.get('q')),
     physicsReady: false,
   };
@@ -83,7 +83,6 @@ function boot() {
       ui?.sync();
       return true;
     },
-    toggle(key) { state[key] = !state[key]; ui?.sync(); },
     reset() { app.runPreset('whole'); camera.set({ ...app.scene.camera, fov: 25 * Math.PI / 180 }); },
     cutWith(origin, normal, pieces) {
       const n = world.cut(origin, normal, pieces);
@@ -127,7 +126,7 @@ function boot() {
     renderer.render({
       camera, dt, time, drawables: [...world.drawables(), ...tools.drawables()],
       transparent: juice.count ? [(ctx) => juice.draw(ctx)] : [],
-      macro: state.macro, focus: v3.len(v3.sub(b.centre, camera.eye)),
+      focus: v3.len(v3.sub(b.centre, camera.eye)),
       wetness: juice.wetness, wetExtent: juice.extent, wetSize: juice.size,
     });
     tools.drawOverlay(dt);
@@ -191,14 +190,13 @@ function boot() {
       quality: state.quality, fps: Math.round(1000 / emaMs), gpu: gl.caps.gpu, droplets: juice.count, physicsReady: state.physicsReady,
       tool: state.tool, preset: state.preset, awake: app.physics ? app.physics.awake(world.pieces) : 0, errors: gl.errors.slice(),
       width: renderer.width, height: renderer.height, floatTargets: gl.caps.floatTargets,
-      knife: tools.knifeVisible, splats: juice.stats.splats, drips: juice.stats.drips, macro: state.macro,
+      knife: tools.knifeVisible, splats: juice.stats.splats, drips: juice.stats.drips,
       muted: audio.muted,
     }),
     poses: () => world.pieces.map((p) => ({ id: p.id, position: p.position.slice(), rotation: p.rotation.slice(), sleeping: p.body ? p.body.isSleeping() : null, caps: p.caps.length, faceUp: p.caps.length ? Math.max(...p.caps.map((c) => restDirToWorld(p, c.normal)[1])) : -1 })),
     project: (p) => camera.project(p, canvas.clientWidth, canvas.clientHeight),
     contacts: () => world.contacts(),
     wetness: () => juice.stats.area,
-    toggle: (key) => { if (key !== 'macro') return false; app.toggle(key); return state[key]; },
     preset: (name) => app.runPreset(name),
     cut: (point, normal) => world.cut(point, normal),
     newOrange: (seed) => { app.newOrange(seed); state.preset = 'whole'; ui.sync(); return world.pieces.length; },
