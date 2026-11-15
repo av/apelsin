@@ -1,6 +1,6 @@
 # AGENTS.md — Apelsin
 
-The realism bar is `/tmp/apelsin-work/refs/ivan-reference-wedges.jpg` (when present), and the numbers come from `/tmp/apelsin-work/research/REALISM.md`.
+The realism bar is a studio product photo of two equatorial orange quarters on seamless white; judge every change side by side with real orange photos at the same scale.
 
 ## Scope
 
