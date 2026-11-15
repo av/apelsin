@@ -82,7 +82,7 @@ Pits pitsAt(vec3 d, float R, vec4 gs[25], int n) {
   Pits P; P.h = 0.0; P.k = 0.0; P.id = vec3(0.5);
   float best = 0.0;
   vec3 cq = d * R * 1000.0 + uSeed.yzx * 20.0;
-  float vis = smoothstep(0.2, 0.8, vnoise(cq / 4.0) * 0.55 + vnoise(cq / 9.0 + 7.0) * 0.45);
+  float vis = smoothstep(0.15, 0.85, vnoise(cq / 3.5) * 0.5 + vnoise(cq / 9.0 + 7.0) * 0.35 + vnoise(cq / 1.6 + 3.0) * 0.15);
   for (int i = 0; i < 25; i++) {
     if (i >= n) break;
     float core; vec3 id;
@@ -242,6 +242,11 @@ void main() {
     lm = lemon(p, d, lod, tone);
     vec3 lg = lm.xyz - d * dot(lm.xyz, d);
     g += lg * uUndul.w * (1.0 - 0.5 * P.k) * (1.0 - stub) * (1.0 - 0.6 * hole);
+    float tone2;
+    vec4 lc = lemon(p * 0.38 + 0.0137, d, max(lod + log2(0.38), 0.0), tone2);
+    vec3 lg2 = lc.xyz - d * dot(lc.xyz, d);
+    g += lg2 * 0.17 * (1.0 - stub) * (1.0 - 0.6 * hole) * (1.0 - sep);
+    tone = tone * 0.6 + tone2 * 0.5;
   }
   float th = acos(clamp(d.y, -1.0, 1.0));
   float rho = th * poleR;
@@ -256,9 +261,8 @@ void main() {
   col = mix(col, uStemCol.rgb, stemK * uStemCol.a);
   col = mix(col, vec3(0.30, 0.33, 0.04), stemK * stemK * uPal.w);
   vec3 gid = P.id;
-  float speck = (gid.x - 0.5) * 0.08 + (gid.y > 0.95 ? 0.08 : 0.0);
-  col *= 1.0 + speck * P.k;
-  col = mix(col, col * vec3(0.72, 0.58, 0.48), pow(P.k, 3.0) * 0.45 * step(0.6, gid.z));
+  col *= 1.0 + (gid.x - 0.5) * 0.05 * P.k;
+  col = mix(col, col * vec3(0.8, 0.68, 0.6), pow(P.k, 3.0) * 0.25 * step(0.8, gid.z));
   col *= 1.0 + tone * 0.2 + 0.12 * (vnoise(q / 0.14 + 4.0) - 0.5) + 0.1 * (vnoise(q / 0.45 + 9.0) - 0.5);
   float dead = step(0.9992, gid.z) * smoothstep(0.6, 0.9, P.k);
   col = mix(col, col * vec3(0.45, 0.3, 0.2), dead);
