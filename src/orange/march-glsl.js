@@ -24,8 +24,6 @@ uniform mat4 uModel;
 uniform mat4 uPrevModel;
 uniform mat4 uInvModel;
 uniform vec4 uEye;
-uniform vec4 uPlanes[${MAX_PLANES}];
-uniform int uPlaneCount;
 uniform vec4 uBound;
 uniform float uPieceId;
 in vec3 vRest;
@@ -204,7 +202,7 @@ vec3 reliefNormal(vec3 p, int which, float e, float h0) {
 }
 `;
 
-const HEAD = (pass) => '#ifndef OUTPUT_SCALE\n#define OUTPUT_SCALE 1.0\n#endif\n' + FRAME_UBO + NOISE + SURFACE + (pass === 'main' ? LIGHTING : '') + ORANGE_UBO + SHAPE_GLSL + `const float GLAND_RADIAL = ${GLAND_RADIAL.toFixed(3)};\n` + FIELD_COMMON + RIND_GLSL + FIELD_GLSL + MARCH;
+const HEAD = (pass) => '#ifndef OUTPUT_SCALE\n#define OUTPUT_SCALE 1.0\n#endif\n' + FRAME_UBO + NOISE + SURFACE + (pass === 'main' ? LIGHTING : '') + ORANGE_UBO + SHAPE_GLSL + `const float GLAND_RADIAL = ${GLAND_RADIAL.toFixed(3)};\nuniform vec4 uPlanes[${MAX_PLANES}];\nuniform int uPlaneCount;\nconst int MAX_PLANES = ${MAX_PLANES};\n` + FIELD_COMMON + RIND_GLSL + FIELD_GLSL + MARCH;
 
 const SHADOW_FS = `
 out vec4 outColor;
