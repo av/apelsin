@@ -4,7 +4,7 @@ export const GLAND_STRIDE = 5;
 export const SHAPE_SIZE = 128;
 export const SHAPE_BIAS = 0.035;
 const L_MAX = 8;
-const SIGMA = [0, 0, 0.0095, 0.0045, 0.0055, 0.0038, 0.0029, 0.0021, 0.0016];
+const SIGMA = [0, 0, 0.0118, 0.0062, 0.006, 0.0042, 0.0031, 0.0022, 0.0016];
 
 export const GLAND_SIZE = 512;
 export const RELIEF_SIZE = 256;
@@ -26,6 +26,19 @@ float envelopeRelief(vec3 p) {
 
 const DEFAULTS = { a: 0.04, c: 0.0412, flavedo: 0.0013, pith: 0.0034, navel: 0.0016, navelOpen: 0.1, calyx: 0.0038 };
 
+const hash3 = (i, j, k) => {
+  let h = (i * 374761393 + j * 668265263 + k * 2147483647) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+};
+function vnoise3(x, y, z) {
+  const i = Math.floor(x), j = Math.floor(y), k = Math.floor(z);
+  const f = x - i, g = y - j, h = z - k;
+  const u = f * f * (3 - 2 * f), v = g * g * (3 - 2 * g), w = h * h * (3 - 2 * h);
+  const l = (a, b, t) => a + (b - a) * t;
+  return l(l(l(hash3(i, j, k), hash3(i + 1, j, k), u), l(hash3(i, j + 1, k), hash3(i + 1, j + 1, k), u), v),
+    l(l(hash3(i, j, k + 1), hash3(i + 1, j, k + 1), u), l(hash3(i, j + 1, k + 1), hash3(i + 1, j + 1, k + 1), u), v), w);
+}
 const gauss = (rnd) => {
   let u = 0;
   while (u < 1e-12) u = rnd();
@@ -173,6 +186,17 @@ export function createShape(seed = 1, opts = {}) {
     calyx.sepals.push({ angle: phase0 + (k + (rnd() - 0.5) * 0.35) * (Math.PI * 2 / sepals), length: calyxR * (0.75 + 0.3 * rnd()), width: (Math.PI / sepals) * (0.75 + 0.35 * rnd()), lift: rnd() * rnd() * 0.0007, brown: rnd() });
   }
 
+  const flats = [];
+  const nFlat = 2 + Math.floor(rnd() * 2);
+  for (let k = 0; k < nFlat; k++) {
+    const zz = rnd() * 1.4 - 0.7, t = rnd() * Math.PI * 2, q = Math.sqrt(1 - zz * zz);
+    flats.push([q * Math.cos(t), zz, q * Math.sin(t), 0.007 + rnd() * 0.01, 0.25 + rnd() * 0.2]);
+  }
+  const lumpAmp = 0.0045 + rnd() * 0.003, lumpOff = [rnd() * 50, rnd() * 50, rnd() * 50];
+  function lumps(x, y, z) {
+    const q = 40 / 4.5, X = x * q + lumpOff[0], Y = y * q + lumpOff[1], Z = z * q + lumpOff[2];
+    return lumpAmp * ((vnoise3(X, Y, Z) - 0.5) + 0.55 * (vnoise3(X * 2.1 + 7, Y * 2.1 + 3, Z * 2.1 + 5) - 0.5));
+  }
   function sample(d) {
     const x = d[0], y = d[1], z = d[2];
     const ya = x * axis[0] + y * axis[1] + z * axis[2];
@@ -187,7 +211,13 @@ export function createShape(seed = 1, opts = {}) {
       const c = x * bx + y * by + z * bz;
       if (c > 0.8) bump += amp * Math.exp(-(1 - c) * k);
     }
-    let r = r0 * (1 + sh + sh2 + bump);
+    let flatten = 0;
+    for (const [fx, fy, fz, depth, w] of flats) {
+      const c = x * fx + y * fy + z * fz;
+      const t = Math.max(0, (c - Math.cos(w)) / (1 - Math.cos(w)));
+      flatten += depth * t * t * (3 - 2 * t) * (1 - 0.35 * t);
+    }
+    let r = r0 * (1 + sh + sh2 + bump + lumps(x, y, z) - flatten);
     const smooth0 = r;
     const sd = th / stemW;
     r -= stemDip * Math.exp(-sd * sd);
