@@ -1,4 +1,4 @@
-import { quat, v3 } from './math.js';
+import { quat, v3, mulberry32 } from './math.js';
 
 export const PRESET_NAMES = ['whole', 'halves', 'wedges', 'reference'];
 
@@ -52,9 +52,12 @@ const LAYOUTS = {
   },
 
   wedges(app) {
-    const o = app.world.originWorld();
-    app.world.cut(o, [1, 0, 0], null, { impulse: 0, juiceAmount: 0 });
-    axialCuts(app, o, [45 * deg, 90 * deg, 135 * deg]);
+    const rng = mulberry32((app.seed ^ 0x2545f491) >>> 0);
+    const jit = (a) => (rng() * 2 - 1) * a;
+    const o = v3.add(app.world.originWorld(), [jit(0.0008), 0, jit(0.0008)]);
+    const a0 = jit(2 * deg);
+    app.world.cut(o, [Math.cos(a0), 0, Math.sin(a0)], null, { impulse: 0, juiceAmount: 0 });
+    axialCuts(app, o, [45 * deg + jit(3.5 * deg), 90 * deg + jit(3 * deg), 135 * deg + jit(3.5 * deg)]);
     const yaw = app.scene.camera.yaw;
     const { right, toCamera } = cameraFrame(yaw);
     const pieces = app.world.pieces.slice().sort((a, b) => Math.atan2(a.com[2], a.com[0]) - Math.atan2(b.com[2], b.com[0]));
@@ -94,11 +97,12 @@ const LAYOUTS = {
   reference(app) {
     const o = app.world.originWorld();
     const c = app.world.params.c;
-    app.world.cut(v3.add(o, [0, 0.03 * c, 0]), [0, 1, 0], null, { impulse: 0, juiceAmount: 0 });
-    app.world.cut(v3.add(o, [0, -0.66 * c, 0]), [0, 1, 0], null, { impulse: 0, sound: false, juiceAmount: 0 });
-    const disc = app.world.pieces.find((p) => p.caps.length === 2);
-    for (const p of app.world.pieces.slice()) if (p !== disc) app.world.remove(p);
-    axialCuts(app, o, [0, 90 * deg]);
+    const rng = mulberry32((app.seed ^ 0x68e31da4) >>> 0);
+    const jit = (a) => (rng() * 2 - 1) * a;
+    app.world.cut(v3.add(o, [0, 0.03 * c, 0]), [jit(0.03), 1, jit(0.03)], null, { impulse: 0, juiceAmount: 0 });
+    const half = app.world.pieces.slice().sort((a, b) => a.com[1] - b.com[1])[0];
+    for (const p of app.world.pieces.slice()) if (p !== half) app.world.remove(p);
+    axialCuts(app, v3.add(o, [jit(0.001), 0, jit(0.001)]), [jit(3 * deg), 90 * deg + jit(3 * deg)]);
     const quarters = app.world.pieces.slice().sort((a, b) => Math.atan2(a.com[2], a.com[0]) - Math.atan2(b.com[2], b.com[0]));
     const keep = [quarters[0], quarters[1]];
     for (const p of quarters) if (!keep.includes(p)) app.world.remove(p);
@@ -118,7 +122,7 @@ const LAYOUTS = {
     });
     app.settle();
     app.juice.clear();
-    app.camera.set({ target: [0.003, 0.02, -0.008], yaw: 0, pitch: 12 * deg, distance: 0.25, fov: 18 * deg });
+    app.camera.set({ target: [0.006, 0.02, -0.008], yaw: 0, pitch: 12 * deg, distance: 0.275, fov: 18 * deg });
   },
 };
 
