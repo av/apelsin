@@ -69,16 +69,50 @@ float faceInset(vec3 p, int i) {
 }
 float proudClamp(float h, vec3 p, int i) { return h > 0.0 ? h * faceInset(p, i) : h; }
 float reliefH(vec3 p, int i) { return proudClamp(cutHeight(p, uPlanes[i]), p, i) + ridgeLift(p, i); }
+const float K_RIND = 0.00035;
+float edgeK(vec3 p) { return 0.0012 * (0.45 + 1.1 * vnoise(p * 650.0 + oNoise.yzx)); }
+float smaxK(float a, float b, float k) { float h = max(k - abs(a - b), 0.0) / k; return max(a, b) + h * h * k * 0.25; }
 float fine(vec3 p, out int which) {
-  float d = envelope(p);
+  float env = envelope(p);
+  float dp = -1.0, best = -1e9;
+  float k = -1.0;
   which = -1;
   for (int i = 0; i < ${MAX_PLANES}; i++) {
     if (i >= uPlaneCount) break;
     float s = dot(uPlanes[i].xyz, p) - uPlanes[i].w;
     float f = s > H_MIN ? s - reliefH(p, i) : s - H_MIN;
-    if (f > d) { d = f; which = i; }
+    if (i > 0 && abs(dp - f) < 0.0019 && k < 0.0) k = edgeK(p);
+    dp = i == 0 ? f : (k > 0.0 ? smaxK(dp, f, k) : max(dp, f));
+    if (f > best) { best = f; which = i; }
   }
-  return d;
+  if (uPlaneCount == 0) return env;
+  if (env > best) which = -1;
+  return smaxK(env, dp, K_RIND);
+}
+vec3 edgeNormal(vec3 p, int which, float self, float vals[${MAX_PLANES}], float env, vec3 base) {
+  float near = abs(self - env);
+  for (int j = 0; j < ${MAX_PLANES}; j++) {
+    if (j >= uPlaneCount) break;
+    if (j != which) near = min(near, abs(self - vals[j]));
+  }
+  if (near > 0.0019) return base;
+  float k = uPlaneCount > 1 ? edgeK(p) : 0.001;
+  vec3 acc = vec3(0.0);
+  float wsum = 0.0;
+  for (int j = 0; j < ${MAX_PLANES}; j++) {
+    if (j >= uPlaneCount) break;
+    if (j == which) continue;
+    float h = max(k - abs(self - vals[j]), 0.0) / k;
+    float w = h * 0.5;
+    acc += uPlanes[j].xyz * w;
+    wsum += w;
+  }
+  if (which >= 0) {
+    float h = max(K_RIND - abs(self - env), 0.0) / K_RIND;
+    if (h > 0.0) { acc += envelopeNormal(p) * h * 0.5; wsum += h * 0.5; }
+  }
+  wsum = min(wsum, 0.5);
+  return normalize(base * (1.0 - wsum) + acc);
 }
 void setupRay(out vec3 ro, out vec3 rd) {
   if (uEye.w > 1.5) { ro = uEye.xyz; rd = normalize(vRest - uEye.xyz); }
@@ -126,10 +160,10 @@ bool refine(vec3 ro, vec3 rd, inout float t, out int which, int steps) {
     if (dn > 0.2) {
       float s0 = dot(pl.xyz, ro) - pl.w;
       float tt = s0 / dn;
-      int iters = tierSteps(2, 2, 2, 2);
+      int iters = tierSteps(1, 1, 1, 1);
       for (int k = 0; k < 4; k++) {
         if (k >= iters) break;
-        tt = (s0 - reliefH(ro + rd * tt, only)) / dn;
+        tt = (s0 - cutHeight(ro + rd * tt, pl)) / dn;
       }
       tt = max(tt, t);
       vec3 q = ro + rd * tt;
@@ -260,26 +294,32 @@ void main() {
   vec3 world = wp.xyz / wp.w;
   vec3 p = (uInvModel * vec4(world, 1.0)).xyz;
   int which = -1;
-  float best = envelope(p), hw = 0.0;
+  float env = envelope(p);
+  float best = env, hw = 0.0;
+  float vals[${MAX_PLANES}];
   Anat Aw;
   Sac Sw = noSac();
   for (int i = 0; i < ${MAX_PLANES}; i++) {
+    vals[i] = -1.0;
     if (i >= uPlaneCount) break;
     float s = dot(uPlanes[i].xyz, p) - uPlanes[i].w;
+    vals[i] = s - H_MIN;
     if (s <= H_MIN) continue;
     vec3 q = onPlane(p, uPlanes[i]);
     Anat A = anatomy(q);
     Sac S = noSac();
     if (fleshy(A)) S = sacsAt(A);
     float h = proudClamp(heightAt(A, S, q, uPlanes[i]), p, i) + ridgeLift(p, i);
+    vals[i] = s - h;
     if (s - h > best) { best = s - h; which = i; hw = h; Aw = A; Sw = S; }
   }
   vec3 Nr = which < 0 ? envelopeNormal(p) : uPlanes[which].xyz;
+  vec3 Ne = edgeNormal(p, which, best, vals, env, Nr);
   SurfaceInput si;
   si.rest = p;
-  si.restNormal = Nr;
+  si.restNormal = which < 0 ? Ne : Nr;
   si.world = world;
-  si.normal = normalize(mat3(uModel) * Nr);
+  si.normal = normalize(mat3(uModel) * Ne);
   si.V = normalize(uCamPos.xyz - world);
   si.cap = which < 0 ? 0.0 : 1.0;
   si.restToWorld = mat3(uModel);
@@ -287,7 +327,7 @@ void main() {
   gPx = si.pixel;
   Surface s;
   if (which < 0) s = rindSurface(si);
-  else s = cutSurface(si, uPlanes[which], (uFlags.x < 1.5 ? uPlanes[which].xyz : reliefNormal(p, which, max(si.pixel * 0.7, 0.00003), hw)), Aw, Sw);
+  else s = cutSurface(si, uPlanes[which], normalize((uFlags.x < 1.5 ? Nr : reliefNormal(p, which, max(si.pixel * 0.7, 0.00003), hw)) + Ne - Nr), Aw, Sw);
   vec3 diffuse, specular;
   shadeSurface(s, si, diffuse, specular);
   if (termOff(128)) specular = vec3(0.0);
